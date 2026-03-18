@@ -37,6 +37,7 @@ log/*
 projects/dbt/**/logs
 projects/dbt/**/dbt_packages
 projects/dbt/**/target
+build.log
 
 # conf
 conf/**/*.jks
@@ -56,3 +57,4 @@ projects/dagster/metastore_db
 
 # Metabase 
 conf/metabase/metabase.db.trace.db
+conf/metabase/metabase.db.v1-backup.mv.db
