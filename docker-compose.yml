@@ -53,6 +53,8 @@ services:
       - POSTGRES_DB=ngods
     ports:
       - '5432:5432'
+    volumes:
+      - ./postgres/init:/docker-entrypoint-initdb.d
     networks:
       - ndsnet
     healthcheck:
@@ -68,11 +70,16 @@ services:
       - AWS_ACCESS_KEY_ID=minio
       - AWS_SECRET_ACCESS_KEY=minio123
       - AWS_REGION=us-east-1
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://ngods:ngods@postgres:5432/airflow
+      - AIRFLOW__API__SECRET_KEY=ngods-airflow-secret-key
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__DAGS_FOLDER=/var/lib/ngods/airflow/dags
     volumes:
       - ./data/html:/var/lib/ngods/html
       - ./data/stage:/var/lib/ngods/stage
       - ./data/spark/notebooks:/var/lib/ngods/notebooks
-      - ./projects/dagster:/var/lib/ngods/dagster
+      - ./projects/airflow/dags:/var/lib/ngods/airflow/dags
       - ./projects/dbt:/var/lib/ngods/dbt
     ports:
       - '8888:8888' # Spark notebook port
@@ -82,15 +89,15 @@ services:
       - '10000:10000' # Thrift ODBC/JDBC port
       - '10009:10009' # Kyuubi JDBC port
       - '18080:18080' # Spark history web ui port
-      - '3070:3070' # Dagster web ui port
+      - '8080:8080' # Airflow web ui port
     networks:
       ndsnet:
         aliases:
           - spark
-          - dagster
+          - airflow
           - dbt
           - aio
-    command: 
+    command:
       - notebook
     depends_on:
       postgres:
