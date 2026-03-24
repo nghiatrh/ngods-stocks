@@ -4,26 +4,31 @@ FROM python:3.12-bookworm
 ENV METASTORE_HADOOP_VERSION=3.2.0
 ENV METASTORE_VERSION=3.0.0
 ENV SPARK_HOME=/opt/spark
-ENV DAGSTER_HOME=/opt/dagster
+ENV AIRFLOW_HOME=/opt/airflow
 ENV KYUUBI_HOME=/opt/kyuubi
 ENV BIN_DIR=/usr/bin
 
-ENV DAGSTER_DIR=/var/lib/ngods/dagster
 ENV DBT_DIR=/var/lib/ngods/dbt
 ENV NOTEBOOKS_DIR=/var/lib/ngods/notebooks
 ENV DATA_STAGE_DIR=/var/lib/ngods/stage
 ENV HTML_DIR=/var/lib/ngods/html
+ENV AIRFLOW_DAGS_DIR=/var/lib/ngods/airflow/dags
+
+# Airflow core settings
+ENV AIRFLOW__CORE__EXECUTOR=LocalExecutor
+ENV AIRFLOW__CORE__LOAD_EXAMPLES=False
+ENV AIRFLOW__CORE__DAGS_FOLDER=/var/lib/ngods/airflow/dags
 
 # Add iceberg spark runtime jar to IJava classpath
 ENV IJAVA_CLASSPATH=/opt/spark/jars/*
 ENV PATH="/opt/spark/sbin:/opt/spark/bin:${PATH}"
 ENV INSTALL_DIR=/tmp/install
 
-RUN mkdir -p ${SPARK_HOME} ${MINIO_HOME}/bin ${DAGSTER_HOME}  ${KYUUBI_HOME} \ 
-             ${DAGSTER_DIR} ${DBT_DIR} ${DATA_STAGE_DIR} ${NOTEBOOKS_DIR} ${INSTALL_DIR} ${HTML_DIR} \
+RUN mkdir -p ${SPARK_HOME} ${AIRFLOW_HOME} ${KYUUBI_HOME} \
+             ${AIRFLOW_DAGS_DIR} ${DBT_DIR} ${DATA_STAGE_DIR} ${NOTEBOOKS_DIR} ${INSTALL_DIR} ${HTML_DIR} \
             /root/.ipython/profile_default/startup
 
-# install core packages 
+# install core packages
 RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y --no-install-recommends \
       sudo \
@@ -37,8 +42,8 @@ RUN apt-get update && apt-get upgrade -y && \
       gcc \
       g++ \
       libsasl2-dev \
-		  libsasl2-2\ 
-		  libsasl2-modules-gssapi-mit\
+	  libsasl2-2 \
+	  libsasl2-modules-gssapi-mit \
       unixodbc-dev \
       ssh \
       postgresql-client \
@@ -46,7 +51,18 @@ RUN apt-get update && apt-get upgrade -y && \
 
 WORKDIR ${INSTALL_DIR}
 
-# Install python deps
+# Install Apache Airflow + all providers in one step with official constraints
+# to avoid resolution conflicts between two separate pip steps
+ARG AIRFLOW_VERSION=3.1.8
+RUN pip3 install --no-cache-dir \
+    "apache-airflow==${AIRFLOW_VERSION}" \
+    "apache-airflow-providers-trino" \
+    "apache-airflow-providers-apache-spark" \
+    "apache-airflow-providers-postgres" \
+    "astronomer-cosmos" \
+    --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-3.12.txt"
+
+# Install remaining python deps (no airflow packages here to avoid constraint conflicts)
 COPY conf/requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt \
     && rm requirements.txt
@@ -75,18 +91,17 @@ RUN curl https://github.com/SpencerPark/IJava/releases/download/v1.3.0/ijava-1.3
     && sudo ./aws/install \
     && rm awscliv2.zip \
     && rm -rf aws/ \
-# Download and install Kyuubi JDBC
+# Download and install Kyuubi
   && curl https://archive.apache.org/dist/kyuubi/kyuubi-1.10.3/apache-kyuubi-1.10.3-bin.tgz -Lo kyuubi.tgz \
     && tar xvzf kyuubi.tgz --directory ${KYUUBI_HOME} --strip-components 1 \
     && rm kyuubi.tgz \
-# Download and install Postgres deiver for Hive metastore
+# Download PostgreSQL driver for Spark/Iceberg
   && curl https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.10/postgresql-42.7.10.jar -Lo pgsql.jar \
-    && mv pgsql.jar /opt/spark/jars 
+    && mv pgsql.jar /opt/spark/jars
 
 WORKDIR ${SPARK_HOME}
 
 COPY conf/spark-defaults.conf ${SPARK_HOME}/conf
-COPY conf/dagster.yaml ${DAGSTER_HOME}
 COPY scripts/entrypoint.sh ${BIN_DIR}
 COPY conf/ipython/startup/00-prettytables.py /root/.ipython/profile_default/startup
 COPY conf/ipython/startup/README /root/.ipython/profile_default/startup
@@ -98,7 +113,7 @@ RUN chmod u+x ${SPARK_HOME}/* \
   && chmod u+x ${BIN_DIR}/notebook \
   && chmod u+x ${BIN_DIR}/pyspark-notebook
 
-EXPOSE 3070
+EXPOSE 8080
 EXPOSE 8888
 EXPOSE 7077
 EXPOSE 8061
