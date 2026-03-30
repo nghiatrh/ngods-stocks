@@ -70,6 +70,8 @@ services:
       - AWS_ACCESS_KEY_ID=minio
       - AWS_SECRET_ACCESS_KEY=minio123
       - AWS_REGION=us-east-1
+      - VNSTOCK_API_KEY=${VNSTOCK_API_KEY:-}
+      - AIRFLOW_ADMIN_PASSWORD=${AIRFLOW_ADMIN_PASSWORD:-admin}
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://ngods:ngods@postgres:5432/airflow
       - AIRFLOW__API__SECRET_KEY=ngods-airflow-secret-key
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor

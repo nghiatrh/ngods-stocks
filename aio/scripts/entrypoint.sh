@@ -11,18 +11,28 @@ start-worker.sh spark://spark:7077 --webui-port 8062
 start-history-server.sh
 ${KYUUBI_HOME}/bin/kyuubi start
 
-# airflow - initialise DB and create admin user on first run, then start services
+# Initialise Iceberg namespaces in the warehouse catalog.
+# spark.sql.defaultCatalog=warehouse means Spark looks for warehouse.default
+# on every session start — the session fails if the namespace doesn't exist.
+spark-sql -e "
+  CREATE NAMESPACE IF NOT EXISTS warehouse.default;
+  CREATE NAMESPACE IF NOT EXISTS warehouse.bronze;
+  CREATE NAMESPACE IF NOT EXISTS warehouse.silver;
+  CREATE NAMESPACE IF NOT EXISTS warehouse.gold;
+" 2>/dev/null || true
+
+# airflow - initialise DB and write fixed credentials before starting services
 airflow db migrate
-# Airflow 3.x Simple Auth Manager: create user then explicitly reset password to known value
-airflow users create \
-    --username admin \
-    --firstname Admin \
-    --lastname Admin \
-    --role Admin \
-    --email admin@ngods.com \
-    --password admin 2>/dev/null || true
-airflow users reset-password --username admin --password admin 2>/dev/null || true
+
+# Airflow 3.x Simple Auth Manager stores plaintext passwords in a JSON file.
+# Pre-writing the file prevents the random password from being generated.
+# Password is configurable via AIRFLOW_ADMIN_PASSWORD env var (default: admin).
+AIRFLOW_ADMIN_PASSWORD=${AIRFLOW_ADMIN_PASSWORD:-admin}
+mkdir -p "${AIRFLOW_HOME}"
+echo "{\"admin\": \"${AIRFLOW_ADMIN_PASSWORD}\"}" > "${AIRFLOW_HOME}/simple_auth_manager_passwords.json.generated"
+echo "Airflow admin password set to: ${AIRFLOW_ADMIN_PASSWORD}"
 airflow api-server -p 8080 &
+airflow dag-processor &
 airflow scheduler &
 
 # Entrypoint, for example notebook, pyspark or spark-sql

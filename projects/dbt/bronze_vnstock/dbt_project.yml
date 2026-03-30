@@ -1,0 +1,26 @@
+name: 'bronze_vnstock'
+version: '1.0.0'
+config-version: 2
+
+profile: 'spark'           # reuses the existing spark profile (schema: bronze)
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+analysis-paths: ["analyses"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  bronze_vnstock:
+    +file_format: iceberg
+    +schema: bronze
+    market:
+      +materialized: incremental
+      +incremental_strategy: append
+    reference:
+      +materialized: table
