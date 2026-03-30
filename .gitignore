@@ -59,3 +59,4 @@ projects/dagster/metastore_db
 conf/metabase/metabase.db.trace.db
 conf/metabase/metabase.db.v1-backup.mv.db
 conf/metabase/metabase.db.mv.db
+.env

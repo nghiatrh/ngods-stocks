@@ -17,3 +17,7 @@ kaggle
 yfinance
 pmdarima
 matplotlib
+# ingestion pipeline dependencies
+s3fs
+pyarrow
+vnstock

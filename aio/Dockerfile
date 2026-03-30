@@ -85,6 +85,12 @@ RUN curl https://github.com/SpencerPark/IJava/releases/download/v1.3.0/ijava-1.3
 # Download URL connection client required for S3FileIO
   && curl https://repo1.maven.org/maven2/software/amazon/awssdk/url-connection-client/2.42.13/url-connection-client-2.42.13.jar -Lo url-connection-client-2.42.13.jar \
      && mv url-connection-client-2.42.13.jar /opt/spark/jars \
+# Download hadoop-aws (provides S3AFileSystem for s3a:// paths in Spark SQL)
+  && curl https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar -Lo hadoop-aws-3.3.4.jar \
+     && mv hadoop-aws-3.3.4.jar /opt/spark/jars \
+# Download AWS SDK v1 bundle (required by hadoop-aws 3.3.4 at runtime — distinct from the SDK v2 bundle above)
+  && curl https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar -Lo aws-java-sdk-bundle-1.12.262.jar \
+     && mv aws-java-sdk-bundle-1.12.262.jar /opt/spark/jars \
 # Install AWS CLI
   && curl https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip \
     && unzip awscliv2.zip \
