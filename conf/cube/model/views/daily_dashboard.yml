@@ -1,0 +1,47 @@
+views:
+  - name: DailyDashboard
+    title: Daily Stock Dashboard
+    description: >
+      Unified per-symbol daily view combining price performance, foreign investor
+      flow, and intraday trade flow. Primary entry point for BI tools and dashboards.
+
+    cubes:
+      # Core price & return metrics
+      - join_path: EquityPerformance
+        includes:
+          - trade_date
+          - symbol
+          - company_name
+          - sector
+          - industry_group
+          - market_sector
+          - avg_close
+          - avg_open
+          - high
+          - low
+          - total_volume
+          - avg_pct_change
+          - max_pct_change
+          - min_pct_change
+          - avg_intraday_range
+          - avg_volume_ratio_20d
+          - count
+
+      # Foreign investor activity
+      - join_path: EquityPerformance.ForeignFlow
+        includes:
+          - net_foreign_value_bn
+          - net_foreign_volume
+          - foreign_buy_value_bn
+          - foreign_sell_value_bn
+          - avg_remaining_room
+
+      # Intraday buying / selling pressure
+      - join_path: EquityPerformance.TradeFlow
+        includes:
+          - avg_vwap
+          - avg_buy_ratio
+          - trade_count
+          - avg_trade_size
+          - buy_volume
+          - sell_volume

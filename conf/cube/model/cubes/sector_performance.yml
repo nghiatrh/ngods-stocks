@@ -1,0 +1,88 @@
+cubes:
+  - name: SectorPerformance
+    sql_table: gold.rpt_sector_performance
+    title: Daily Sector Performance
+
+    measures:
+      - name: advancers
+        sql: advancers
+        type: sum
+        title: Advancers
+
+      - name: decliners
+        sql: decliners
+        type: sum
+        title: Decliners
+
+      - name: symbol_count
+        sql: symbol_count
+        type: sum
+        title: Symbol Count
+
+      - name: avg_pct_change
+        sql: avg_pct_change
+        type: avg
+        title: Avg Return (%)
+        format: percent
+
+      - name: top_gain_pct
+        sql: top_gain_pct
+        type: max
+        title: Best Stock Return (%)
+        format: percent
+
+      - name: top_loss_pct
+        sql: top_loss_pct
+        type: min
+        title: Worst Stock Return (%)
+        format: percent
+
+      - name: total_value_bn
+        sql: total_value_bn_vnd
+        type: sum
+        title: Total Value (bn VND)
+        format: number
+
+      - name: total_volume
+        sql: total_volume
+        type: sum
+        title: Total Volume
+        format: number
+
+    dimensions:
+      - name: trade_date
+        sql: "CAST({CUBE}.trade_date AS TIMESTAMP)"
+        type: time
+        title: Trade Date
+
+      - name: sector_name
+        sql: sector_name
+        type: string
+        title: Sector
+
+      - name: icb_code3
+        sql: icb_code3
+        type: string
+        title: ICB Code
+
+      - name: sector_date
+        sql: "CONCAT({CUBE}.icb_code3, '_', CAST({CUBE}.trade_date AS VARCHAR))"
+        type: string
+        primary_key: true
+
+    pre_aggregations:
+      - name: daily_by_sector
+        measures:
+          - advancers
+          - decliners
+          - avg_pct_change
+          - total_value_bn
+          - total_volume
+        dimensions:
+          - sector_name
+          - icb_code3
+        time_dimension: trade_date
+        granularity: day
+        partition_granularity: month
+        refresh_key:
+          every: 1 day
