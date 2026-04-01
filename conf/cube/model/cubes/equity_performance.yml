@@ -1,0 +1,136 @@
+cubes:
+  - name: EquityPerformance
+    sql_table: gold.rpt_stock_performance
+    title: Equity Daily Performance
+
+    joins:
+      - name: ForeignFlow
+        sql: "{CUBE}.trade_date = {ForeignFlow}.trade_date AND {CUBE}.symbol = {ForeignFlow}.symbol"
+        relationship: one_to_one
+
+      - name: TradeFlow
+        sql: "{CUBE}.trade_date = {TradeFlow}.trade_date AND {CUBE}.symbol = {TradeFlow}.symbol"
+        relationship: one_to_one
+
+    measures:
+      - name: count
+        type: count
+        title: Trading Days
+
+      - name: avg_close
+        sql: close
+        type: avg
+        title: Avg Close Price
+        format: number
+
+      - name: avg_open
+        sql: open
+        type: avg
+        title: Avg Open Price
+        format: number
+
+      - name: high
+        sql: high
+        type: max
+        title: Period High
+        format: number
+
+      - name: low
+        sql: low
+        type: min
+        title: Period Low
+        format: number
+
+      - name: total_volume
+        sql: volume
+        type: sum
+        title: Total Volume
+        format: number
+
+      - name: avg_pct_change
+        sql: pct_change
+        type: avg
+        title: Avg Daily Return (%)
+        format: percent
+
+      - name: max_pct_change
+        sql: pct_change
+        type: max
+        title: Best Day Return (%)
+        format: percent
+
+      - name: min_pct_change
+        sql: pct_change
+        type: min
+        title: Worst Day Return (%)
+        format: percent
+
+      - name: avg_intraday_range
+        sql: intraday_range_pct
+        type: avg
+        title: Avg Intraday Range (%)
+        description: Average (high - low) / prior_close — daily volatility proxy
+        format: percent
+
+      - name: avg_volume_ratio_20d
+        sql: volume_ratio_20d
+        type: avg
+        title: Avg Volume vs 20d MA
+        description: "Values > 1 indicate above-average activity"
+        format: number
+
+    dimensions:
+      - name: trade_date
+        sql: "CAST({CUBE}.trade_date AS TIMESTAMP)"
+        type: time
+        title: Trade Date
+        primary_key: false
+
+      - name: symbol
+        sql: symbol
+        type: string
+        title: Symbol
+        primary_key: false
+
+      - name: company_name
+        sql: company_name
+        type: string
+        title: Company Name
+
+      - name: sector
+        sql: sector
+        type: string
+        title: Sector
+
+      - name: industry_group
+        sql: industry_group
+        type: string
+        title: Industry Group
+
+      - name: market_sector
+        sql: market_sector
+        type: string
+        title: Market Sector
+
+      - name: symbol_date
+        sql: "CONCAT({CUBE}.symbol, '_', CAST({CUBE}.trade_date AS VARCHAR))"
+        type: string
+        primary_key: true
+
+    pre_aggregations:
+      - name: daily_by_symbol
+        measures:
+          - avg_close
+          - total_volume
+          - avg_pct_change
+          - avg_intraday_range
+          - avg_volume_ratio_20d
+        dimensions:
+          - symbol
+          - sector
+          - industry_group
+        time_dimension: trade_date
+        granularity: day
+        partition_granularity: month
+        refresh_key:
+          every: 1 day

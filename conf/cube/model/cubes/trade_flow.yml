@@ -1,0 +1,82 @@
+cubes:
+  - name: TradeFlow
+    sql_table: gold.rpt_trade_flow
+    title: Intraday Trade Flow
+
+    measures:
+      - name: trade_count
+        sql: trade_count
+        type: sum
+        title: Total Trades
+        format: number
+
+      - name: total_volume
+        sql: total_volume
+        type: sum
+        title: Total Volume
+        format: number
+
+      - name: avg_vwap
+        sql: vwap
+        type: avg
+        title: Avg VWAP
+        description: Volume-weighted average price across selected symbols / period
+        format: number
+
+      - name: buy_volume
+        sql: buy_volume
+        type: sum
+        title: Buy Volume
+        format: number
+
+      - name: sell_volume
+        sql: sell_volume
+        type: sum
+        title: Sell Volume
+        format: number
+
+      - name: avg_trade_size
+        sql: avg_trade_size
+        type: avg
+        title: Avg Trade Size (shares)
+        format: number
+
+      - name: avg_buy_ratio
+        sql: "CAST({CUBE}.buy_ratio AS DOUBLE)"
+        type: avg
+        title: Avg Buy Ratio
+        description: "Buy volume / total volume. Values > 0.5 = net buying pressure"
+        format: number
+
+    dimensions:
+      - name: trade_date
+        sql: "CAST({CUBE}.trade_date AS TIMESTAMP)"
+        type: time
+        title: Trade Date
+
+      - name: symbol
+        sql: symbol
+        type: string
+        title: Symbol
+
+      - name: symbol_date
+        sql: "CONCAT({CUBE}.symbol, '_', CAST({CUBE}.trade_date AS VARCHAR))"
+        type: string
+        primary_key: true
+
+    pre_aggregations:
+      - name: daily_by_symbol
+        measures:
+          - trade_count
+          - total_volume
+          - buy_volume
+          - sell_volume
+          - avg_buy_ratio
+          - avg_vwap
+        dimensions:
+          - symbol
+        time_dimension: trade_date
+        granularity: day
+        partition_granularity: month
+        refresh_key:
+          every: 1 day

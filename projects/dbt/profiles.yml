@@ -26,3 +26,35 @@ trino:
       session_properties:
         query_max_run_time: 5d
         exchange_compression: True
+
+trino_silver:
+  target: dev
+  outputs:
+    dev:
+      type: trino
+      user: trino
+      host: trino
+      port: 8060
+      database: warehouse
+      schema: silver
+      threads: 4
+      http_scheme: http
+      session_properties:
+        query_max_run_time: 5d
+        exchange_compression: True
+
+trino_gold:
+  target: dev
+  outputs:
+    dev:
+      type: trino
+      user: trino
+      host: trino
+      port: 8060
+      database: warehouse
+      schema: gold
+      threads: 4
+      http_scheme: http
+      session_properties:
+        query_max_run_time: 5d
+        exchange_compression: True

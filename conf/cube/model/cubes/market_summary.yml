@@ -1,0 +1,84 @@
+cubes:
+  - name: MarketSummary
+    sql_table: gold.rpt_market_summary
+    title: Daily Market Breadth
+
+    measures:
+      - name: advancers
+        sql: advancers
+        type: sum
+        title: Advancers
+        description: Symbols that closed higher than previous session
+
+      - name: decliners
+        sql: decliners
+        type: sum
+        title: Decliners
+        description: Symbols that closed lower than previous session
+
+      - name: unchanged
+        sql: unchanged
+        type: sum
+        title: Unchanged
+
+      - name: total_symbols
+        sql: total_symbols
+        type: sum
+        title: Total Symbols
+
+      - name: advance_decline_ratio
+        sql: "CAST({CUBE}.advancers AS DOUBLE) / NULLIF({CUBE}.decliners, 0)"
+        type: number
+        title: Advance / Decline Ratio
+        description: "Values > 1 = net bullish breadth"
+        format: number
+
+      - name: total_market_value_bn
+        sql: total_value_bn_vnd
+        type: sum
+        title: Total Market Value (bn VND)
+        format: number
+
+      - name: total_volume
+        sql: total_volume
+        type: sum
+        title: Total Volume
+        format: number
+
+      - name: avg_pct_change
+        sql: avg_pct_change
+        type: avg
+        title: Avg Return (%)
+        format: percent
+
+      - name: top_gain_pct
+        sql: top_gain_pct
+        type: max
+        title: Best Performer (%)
+        format: percent
+
+      - name: top_loss_pct
+        sql: top_loss_pct
+        type: min
+        title: Worst Performer (%)
+        format: percent
+
+    dimensions:
+      - name: trade_date
+        sql: "CAST({CUBE}.trade_date AS TIMESTAMP)"
+        type: time
+        title: Trade Date
+        primary_key: true
+
+    pre_aggregations:
+      - name: daily
+        measures:
+          - advancers
+          - decliners
+          - total_market_value_bn
+          - total_volume
+          - avg_pct_change
+        time_dimension: trade_date
+        granularity: day
+        refresh_key:
+          every: 1 day

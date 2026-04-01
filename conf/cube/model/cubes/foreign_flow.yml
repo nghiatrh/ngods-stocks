@@ -1,0 +1,91 @@
+cubes:
+  - name: ForeignFlow
+    sql_table: gold.rpt_foreign_flow
+    title: Foreign Investor Flow
+
+    measures:
+      - name: foreign_buy_volume
+        sql: foreign_buy_volume
+        type: sum
+        title: Foreign Buy Volume
+        format: number
+
+      - name: foreign_sell_volume
+        sql: foreign_sell_volume
+        type: sum
+        title: Foreign Sell Volume
+        format: number
+
+      - name: net_foreign_volume
+        sql: net_foreign_volume
+        type: sum
+        title: Net Foreign Volume
+        description: "Positive = net buying; negative = net selling"
+        format: number
+
+      - name: foreign_buy_value_bn
+        sql: foreign_buy_value_bn
+        type: sum
+        title: Foreign Buy Value (bn VND)
+        format: number
+
+      - name: foreign_sell_value_bn
+        sql: foreign_sell_value_bn
+        type: sum
+        title: Foreign Sell Value (bn VND)
+        format: number
+
+      - name: net_foreign_value_bn
+        sql: net_foreign_value_bn
+        type: sum
+        title: Net Foreign Value (bn VND)
+        description: "Positive = net buying pressure; negative = net selling pressure"
+        format: number
+
+      - name: avg_remaining_room
+        sql: remaining_foreign_room
+        type: avg
+        title: Avg Remaining Foreign Room
+        format: number
+
+    dimensions:
+      - name: trade_date
+        sql: "CAST({CUBE}.trade_date AS TIMESTAMP)"
+        type: time
+        title: Trade Date
+
+      - name: symbol
+        sql: symbol
+        type: string
+        title: Symbol
+
+      - name: company_name
+        sql: company_name
+        type: string
+        title: Company Name
+
+      - name: sector
+        sql: sector
+        type: string
+        title: Sector
+
+      - name: symbol_date
+        sql: "CONCAT({CUBE}.symbol, '_', CAST({CUBE}.trade_date AS VARCHAR))"
+        type: string
+        primary_key: true
+
+    pre_aggregations:
+      - name: daily_by_symbol
+        measures:
+          - foreign_buy_value_bn
+          - foreign_sell_value_bn
+          - net_foreign_value_bn
+          - net_foreign_volume
+        dimensions:
+          - symbol
+          - sector
+        time_dimension: trade_date
+        granularity: day
+        partition_granularity: month
+        refresh_key:
+          every: 1 day
