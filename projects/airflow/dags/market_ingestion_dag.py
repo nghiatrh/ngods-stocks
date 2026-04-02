@@ -40,45 +40,49 @@ def market_ingestion_dag():
     @task
     def ingest_equity_ohlcv(symbols: list) -> None:
         from ingestion.market import fetch_equity_ohlcv
-        from ingestion.storage import get_fs, market_path, write_parquet
+        from ingestion.storage import delete_market, get_fs, market_path, write_parquet
         import pendulum
 
         date = pendulum.yesterday("Asia/Ho_Chi_Minh").to_date_string()
-        df = fetch_equity_ohlcv(symbols, date)
         fs = get_fs()
+        delete_market("equity_ohlcv", date, fs)
+        df = fetch_equity_ohlcv(symbols, date)
         write_parquet(df, market_path("equity_ohlcv", date), fs)
 
     @task
     def ingest_equity_trades(symbols: list) -> None:
         from ingestion.market import fetch_equity_trades
-        from ingestion.storage import get_fs, market_path, write_parquet
+        from ingestion.storage import delete_market, get_fs, market_path, write_parquet
         import pendulum
 
         date = pendulum.yesterday("Asia/Ho_Chi_Minh").to_date_string()
-        df = fetch_equity_trades(symbols, date)
         fs = get_fs()
+        delete_market("equity_trades", date, fs)
+        df = fetch_equity_trades(symbols, date)
         write_parquet(df, market_path("equity_trades", date), fs)
 
     @task
     def ingest_equity_order_book(symbols: list) -> None:
         from ingestion.market import fetch_equity_order_book
-        from ingestion.storage import get_fs, market_path, write_parquet
+        from ingestion.storage import delete_market, get_fs, market_path, write_parquet
         import pendulum
 
         date = pendulum.yesterday("Asia/Ho_Chi_Minh").to_date_string()
-        df = fetch_equity_order_book(symbols, date)
         fs = get_fs()
+        delete_market("equity_order_book", date, fs)
+        df = fetch_equity_order_book(symbols, date)
         write_parquet(df, market_path("equity_order_book", date), fs)
 
     @task
     def ingest_index_ohlcv() -> None:
         from ingestion.market import fetch_index_ohlcv
-        from ingestion.storage import get_fs, market_path, write_parquet
+        from ingestion.storage import delete_market, get_fs, market_path, write_parquet
         import pendulum
 
         date = pendulum.yesterday("Asia/Ho_Chi_Minh").to_date_string()
-        df = fetch_index_ohlcv(date)
         fs = get_fs()
+        delete_market("index_ohlcv", date, fs)
+        df = fetch_index_ohlcv(date)
         write_parquet(df, market_path("index_ohlcv", date), fs)
 
     # DAG topology: fetch symbols first, then run all ingestion tasks in parallel

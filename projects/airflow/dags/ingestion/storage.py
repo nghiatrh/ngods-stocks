@@ -63,6 +63,14 @@ def write_parquet(df, path: str, fs: s3fs.S3FileSystem) -> None:
     log.info("Written %d rows to %s", len(df), path)
 
 
+def delete_market(dataset: str, date: str, fs: s3fs.S3FileSystem) -> None:
+    """Delete existing market parquet partition for a given date before re-ingesting."""
+    path = market_path(dataset, date)
+    if fs.exists(path):
+        fs.rm(path)
+        log.info("Deleted existing market data at %s", path)
+
+
 def delete_reference(dataset: str, fs: s3fs.S3FileSystem) -> None:
     """Delete existing reference parquet to implement truncate-before-load."""
     path = reference_path(dataset)
