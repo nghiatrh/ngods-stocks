@@ -21,6 +21,7 @@ from ingestion.rate_limiter import throttle
 log = logging.getLogger(__name__)
 
 SOURCE = "VCI"
+LISTING_SOURCE = "KBS"
 INDEX_SYMBOLS = ["VNINDEX", "VN30", "HNX30", "UPCOM"]
 
 
@@ -28,7 +29,7 @@ def get_vn30_symbols() -> List[str]:
     setup_vnstock_auth()
     throttle()
     from vnstock import Listing
-    listing = Listing(source=SOURCE)
+    listing = Listing(source=LISTING_SOURCE)
     symbols = listing.symbols_by_group(group_name="VN30")
     result = list(symbols) if hasattr(symbols, "__iter__") else []
     log.info("Fetched %d VN30 symbols", len(result))
