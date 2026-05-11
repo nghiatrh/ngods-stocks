@@ -63,8 +63,12 @@ def reference_ingestion_dag():
         from ingestion.storage import delete_reference, get_fs, reference_path, write_parquet
 
         fs = get_fs()
-        delete_reference("industry", fs)
         df = fetch_industry()
+        # VCI's industry endpoints are currently broken; preserve the last good
+        # snapshot in MinIO when fetch returns nothing instead of wiping it.
+        if df.empty:
+            return
+        delete_reference("industry", fs)
         write_parquet(df, reference_path("industry"), fs)
 
     @task

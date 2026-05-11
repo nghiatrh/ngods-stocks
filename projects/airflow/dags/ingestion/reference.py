@@ -20,13 +20,14 @@ from ingestion.rate_limiter import throttle
 log = logging.getLogger(__name__)
 
 SOURCE = "VCI"
+LISTING_SOURCE = "KBS"
 
 
 def fetch_equity_listing() -> pd.DataFrame:
     setup_vnstock_auth()
     throttle()
     from vnstock import Listing
-    listing = Listing(source=SOURCE)
+    listing = Listing(source=LISTING_SOURCE)
     df = listing.all_symbols()
     if df is None or df.empty:
         return pd.DataFrame()
