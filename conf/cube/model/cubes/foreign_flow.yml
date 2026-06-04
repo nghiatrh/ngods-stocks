@@ -73,19 +73,3 @@ cubes:
         sql: "CONCAT({CUBE}.symbol, '_', CAST({CUBE}.trade_date AS VARCHAR))"
         type: string
         primary_key: true
-
-    pre_aggregations:
-      - name: daily_by_symbol
-        measures:
-          - foreign_buy_value_bn
-          - foreign_sell_value_bn
-          - net_foreign_value_bn
-          - net_foreign_volume
-        dimensions:
-          - symbol
-          - sector
-        time_dimension: trade_date
-        granularity: day
-        partition_granularity: month
-        refresh_key:
-          every: 1 day

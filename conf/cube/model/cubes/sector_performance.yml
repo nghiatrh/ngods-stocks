@@ -69,20 +69,3 @@ cubes:
         sql: "CONCAT({CUBE}.icb_code3, '_', CAST({CUBE}.trade_date AS VARCHAR))"
         type: string
         primary_key: true
-
-    pre_aggregations:
-      - name: daily_by_sector
-        measures:
-          - advancers
-          - decliners
-          - avg_pct_change
-          - total_value_bn
-          - total_volume
-        dimensions:
-          - sector_name
-          - icb_code3
-        time_dimension: trade_date
-        granularity: day
-        partition_granularity: month
-        refresh_key:
-          every: 1 day

@@ -44,7 +44,7 @@ services:
         condition: service_healthy  
 
   postgres:
-    image: postgres
+    image: pgvector/pgvector:pg16
     hostname: postgres
     container_name: postgres
     environment:
@@ -55,6 +55,7 @@ services:
       - '5432:5432'
     volumes:
       - ./postgres/init:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - ndsnet
     healthcheck:
@@ -161,7 +162,51 @@ services:
       - 3030:3030
     networks:
       - ndsnet
-  
+
+  chat-api:
+    build:
+      context: projects/chat
+    image: ngods-chat:latest
+    container_name: chat-api
+    hostname: chat-api
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY is required}
+      - CHAT_DB_DSN=postgresql://ngods:ngods@postgres:5432/chat
+      - CUBE_API_URL=http://cube:4000
+      - CUBE_API_SECRET=cube
+      - DBT_MANIFEST_PATH=/dbt/gold_vnstock/target/manifest.json
+      - LLM_ROUTER_MODEL=${LLM_ROUTER_MODEL:-claude-haiku-4-5-20251001}
+      - LLM_GENERATOR_MODEL=${LLM_GENERATOR_MODEL:-claude-sonnet-4-6}
+    volumes:
+      - ./projects/chat:/app
+      - ./projects/dbt:/dbt:ro
+    ports:
+      - '8001:8001'
+    networks:
+      - ndsnet
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  chat-ui:
+    image: ngods-chat:latest
+    container_name: chat-ui
+    hostname: chat-ui
+    environment:
+      - CHAT_API_URL=http://chat-api:8001
+    volumes:
+      - ./projects/chat:/app
+    command: ["chainlit", "run", "ui/chainlit_app.py", "--host", "0.0.0.0", "--port", "8501", "--headless"]
+    ports:
+      - '8501:8501'
+    networks:
+      - ndsnet
+    depends_on:
+      - chat-api
+
 networks:
   ndsnet:
     driver: bridge
+
+volumes:
+  postgres_data:

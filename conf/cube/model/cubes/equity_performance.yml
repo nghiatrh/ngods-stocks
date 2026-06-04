@@ -116,21 +116,3 @@ cubes:
         sql: "CONCAT({CUBE}.symbol, '_', CAST({CUBE}.trade_date AS VARCHAR))"
         type: string
         primary_key: true
-
-    pre_aggregations:
-      - name: daily_by_symbol
-        measures:
-          - avg_close
-          - total_volume
-          - avg_pct_change
-          - avg_intraday_range
-          - avg_volume_ratio_20d
-        dimensions:
-          - symbol
-          - sector
-          - industry_group
-        time_dimension: trade_date
-        granularity: day
-        partition_granularity: month
-        refresh_key:
-          every: 1 day

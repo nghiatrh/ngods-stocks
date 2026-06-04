@@ -1,0 +1,47 @@
+# Hand-curated eval set. Each case checks that the generated cube_query
+# contains the expected members. We don't pin the exact JSON — order, limit,
+# and date format vary — only "did the LLM pick the right semantic moves?"
+#
+# Add a case any time the system gets something wrong. This *is* the regression suite.
+- id: top_gainers_today
+  question: "Which stocks had the biggest gain today?"
+  expect_cube: EquityPerformance
+  must_include_measures: ["EquityPerformance.max_pct_change"]
+  must_include_dimensions: ["EquityPerformance.symbol"]
+
+- id: avg_close_by_sector_30d
+  question: "Average closing price by sector over the last 30 days"
+  expect_cube: EquityPerformance
+  must_include_measures: ["EquityPerformance.avg_close"]
+  must_include_dimensions: ["EquityPerformance.sector"]
+  must_include_time_dim: "EquityPerformance.trade_date"
+
+- id: foreign_net_buying_yesterday
+  question: "Which symbols had the highest net foreign buying yesterday?"
+  expect_cube: ForeignFlow
+  must_include_measures_any: ["ForeignFlow.net_foreign_value_bn",
+                              "ForeignFlow.net_foreign_volume"]
+  must_include_dimensions: ["ForeignFlow.symbol"]
+
+- id: market_breadth_last_week
+  question: "What was the market breadth (advancers vs decliners) last week?"
+  expect_cube: MarketSummary
+  must_include_measures_any_all_of:
+    - ["MarketSummary.advancers"]
+    - ["MarketSummary.decliners"]
+
+- id: best_sector_this_month
+  question: "Which sector performed best this month?"
+  expect_cube: SectorPerformance
+  must_include_measures: ["SectorPerformance.avg_pct_change"]
+  must_include_dimensions_any: ["SectorPerformance.sector_name"]
+
+- id: vwap_vic
+  question: "What's the VWAP for VIC over the last 7 days?"
+  expect_cube: TradeFlow
+  must_include_measures: ["TradeFlow.vwap"]
+  must_include_filter_member: "TradeFlow.symbol"
+
+- id: out_of_scope
+  question: "What is the EBITDA growth rate of Vingroup over the last 5 years?"
+  expect_error: true

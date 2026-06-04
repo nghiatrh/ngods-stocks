@@ -1,0 +1,222 @@
+version: 2
+
+models:
+  - name: rpt_market_summary
+    description: >
+      Daily market breadth summary across all VN30 equities.
+      One row per trade_date. Primary table for market-wide dashboard tiles.
+    columns:
+      - name: trade_date
+        description: Trading session date
+        tests:
+          - not_null
+          - unique
+
+      - name: total_symbols
+        description: Total number of VN30 symbols with data for the session
+        tests:
+          - not_null
+
+      - name: advancers
+        description: Number of symbols that closed higher than the previous session
+
+      - name: decliners
+        description: Number of symbols that closed lower than the previous session
+
+      - name: unchanged
+        description: Number of symbols that closed exactly flat (pct_change = 0)
+
+      - name: no_prior_data
+        description: Number of symbols with no prior_close available (new listings etc.)
+
+      - name: total_value_bn_vnd
+        description: Total traded value across all symbols in billions of VND (close × volume / 1e9)
+
+      - name: total_volume
+        description: Total shares traded across all VN30 symbols
+
+      - name: avg_pct_change
+        description: Simple average of daily return (%) across all symbols
+
+      - name: top_gain_pct
+        description: Highest single-symbol daily return (%) for the session
+
+      - name: top_loss_pct
+        description: Lowest single-symbol daily return (%) for the session
+
+  - name: rpt_stock_performance
+    description: >
+      Daily per-stock performance enriched with company and sector metadata.
+      One row per (trade_date, symbol). Primary table for stock-level drill-down.
+    columns:
+      - name: trade_date
+        description: Trading session date
+        tests:
+          - not_null
+
+      - name: symbol
+        description: Stock ticker symbol
+        tests:
+          - not_null
+
+      - name: company_name
+        description: Full legal company name from dim_equity
+
+      - name: sector
+        description: ICB level-4 subsector name
+
+      - name: industry_group
+        description: ICB level-3 sector name
+
+      - name: market_sector
+        description: ICB level-2 supersector name
+
+      - name: open
+        description: Opening price
+
+      - name: high
+        description: Intraday high price
+
+      - name: low
+        description: Intraday low price
+
+      - name: close
+        description: Closing price
+
+      - name: volume
+        description: Total shares traded
+
+      - name: prior_close
+        description: Previous session closing price
+
+      - name: pct_change
+        description: Day-over-day return (%)
+
+      - name: intraday_range_pct
+        description: (high - low) / prior_close * 100 — intraday volatility proxy
+
+      - name: volume_ratio_20d
+        description: Today's volume vs 20-session rolling average. Above 1.0 = above-average activity
+
+  - name: rpt_sector_performance
+    description: >
+      Daily sector-level performance aggregated from VN30 equities.
+      One row per (trade_date, sector). Excludes symbols with no prior_close.
+    columns:
+      - name: trade_date
+        description: Trading session date
+        tests:
+          - not_null
+
+      - name: icb_code3
+        description: ICB level-3 sector code
+
+      - name: sector_name
+        description: ICB level-3 sector name (industry_group)
+        tests:
+          - not_null
+
+      - name: symbol_count
+        description: Number of distinct symbols in the sector for the session
+
+      - name: advancers
+        description: Number of symbols with positive return in the sector
+
+      - name: decliners
+        description: Number of symbols with negative return in the sector
+
+      - name: avg_pct_change
+        description: Average daily return (%) across symbols in the sector
+
+      - name: top_gain_pct
+        description: Best single-symbol return (%) in the sector
+
+      - name: top_loss_pct
+        description: Worst single-symbol return (%) in the sector
+
+      - name: total_value_bn_vnd
+        description: Total traded value in the sector in billions of VND
+
+      - name: total_volume
+        description: Total shares traded across all symbols in the sector
+
+  - name: rpt_foreign_flow
+    description: >
+      Daily foreign investor buy/sell flow per symbol.
+      One row per (trade_date, symbol). Sourced from order book snapshots
+      which carry cumulative session totals.
+    columns:
+      - name: trade_date
+        description: Trading session date
+        tests:
+          - not_null
+
+      - name: symbol
+        description: Stock ticker symbol
+        tests:
+          - not_null
+
+      - name: company_name
+        description: Full legal company name from dim_equity
+
+      - name: sector
+        description: ICB level-4 subsector name
+
+      - name: foreign_buy_volume
+        description: Total shares bought by foreign investors during the session
+
+      - name: foreign_sell_volume
+        description: Total shares sold by foreign investors during the session
+
+      - name: net_foreign_volume
+        description: Foreign buy volume minus foreign sell volume. Positive = net buying
+
+      - name: foreign_buy_value_bn
+        description: Total value of foreign buy orders in billions of VND
+
+      - name: foreign_sell_value_bn
+        description: Total value of foreign sell orders in billions of VND
+
+      - name: net_foreign_value_bn
+        description: Net foreign flow in billions of VND. Positive = net buying pressure
+
+      - name: remaining_foreign_room
+        description: Remaining foreign ownership room in shares at session end
+
+  - name: rpt_trade_flow
+    description: >
+      Daily intraday trade flow aggregated per symbol.
+      One row per (trade_date, symbol). Derived from tick-level trade data.
+    columns:
+      - name: trade_date
+        description: Trading session date
+        tests:
+          - not_null
+
+      - name: symbol
+        description: Stock ticker symbol
+        tests:
+          - not_null
+
+      - name: trade_count
+        description: Total number of matched trades during the session
+
+      - name: total_volume
+        description: Total shares matched across all trades
+
+      - name: vwap
+        description: Volume-weighted average price (VWAP) for the session
+
+      - name: avg_trade_size
+        description: Average shares per matched trade
+
+      - name: buy_volume
+        description: Total shares matched on the buy side (match_type = 'B')
+
+      - name: sell_volume
+        description: Total shares matched on the sell side (match_type = 'S')
+
+      - name: buy_ratio
+        description: >
+          Buy volume / total volume. Values above 0.5 indicate net buying pressure.
+          Ranges from 0.0 to 1.0.

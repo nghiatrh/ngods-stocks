@@ -69,16 +69,3 @@ cubes:
         type: time
         title: Trade Date
         primary_key: true
-
-    pre_aggregations:
-      - name: daily
-        measures:
-          - advancers
-          - decliners
-          - total_market_value_bn
-          - total_volume
-          - avg_pct_change
-        time_dimension: trade_date
-        granularity: day
-        refresh_key:
-          every: 1 day
