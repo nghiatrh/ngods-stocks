@@ -1,0 +1,157 @@
+version: 2
+
+models:
+  - name: dim_equity
+    description: >
+      Equity dimension table. One row per listed symbol, enriched with ICB
+      industry classification. Rebuilt in full on every run since reference
+      data changes weekly.
+    columns:
+      - name: symbol
+        description: Stock ticker symbol (e.g. ACB, VIC)
+        tests:
+          - not_null
+          - unique
+
+      - name: company_name
+        description: Full legal company name
+        tests:
+          - not_null
+
+      - name: icb_code1
+        description: ICB level-1 industry code (broadest classification)
+
+      - name: icb_code2
+        description: ICB level-2 supersector code
+
+      - name: icb_code3
+        description: ICB level-3 sector code
+
+      - name: icb_code4
+        description: ICB level-4 subsector code (most granular)
+
+      - name: market_sector
+        description: ICB level-2 supersector name (e.g. Financials)
+
+      - name: industry_group
+        description: ICB level-3 sector name (e.g. Banks)
+
+      - name: sector
+        description: ICB level-4 subsector name (most granular label)
+
+  - name: fct_equity_daily
+    description: >
+      Daily equity fact table. One row per (trade_date, symbol).
+      Enriches bronze OHLCV with prior-session close, daily return,
+      intraday volatility, and 20-session volume ratio.
+    columns:
+      - name: trade_date
+        description: Trading session date
+        tests:
+          - not_null
+
+      - name: symbol
+        description: Stock ticker symbol
+        tests:
+          - not_null
+
+      - name: open
+        description: Opening price of the session
+        tests:
+          - not_null
+
+      - name: high
+        description: Intraday high price
+        tests:
+          - not_null
+
+      - name: low
+        description: Intraday low price
+        tests:
+          - not_null
+
+      - name: close
+        description: Closing price of the session
+        tests:
+          - not_null
+
+      - name: volume
+        description: Total shares traded during the session
+        tests:
+          - not_null
+
+      - name: prior_close
+        description: >
+          Closing price of the previous trading session for the same symbol.
+          NULL for the first available date in the dataset.
+
+      - name: pct_change
+        description: >
+          Day-over-day return: (close - prior_close) / prior_close * 100.
+          NULL when prior_close is unavailable or zero.
+
+      - name: intraday_range_pct
+        description: >
+          (high - low) / prior_close * 100. Proxy for intraday volatility.
+          NULL when prior_close is unavailable or zero.
+
+      - name: volume_ratio_20d
+        description: >
+          Today's volume divided by the 20-session rolling average volume.
+          Values above 1.0 indicate above-average activity.
+          NULL for the first 20 sessions of each symbol.
+
+  - name: fct_index_daily
+    description: >
+      Daily index fact table. One row per (trade_date, symbol) for major
+      Vietnamese indices (VNINDEX, VN30, HNX30, UPCOM). Enriches bronze
+      OHLCV with prior-session close, daily return, and YTD return.
+    columns:
+      - name: trade_date
+        description: Trading session date
+        tests:
+          - not_null
+
+      - name: symbol
+        description: Index symbol (e.g. VNINDEX, VN30)
+        tests:
+          - not_null
+
+      - name: open
+        description: Opening value of the index
+        tests:
+          - not_null
+
+      - name: high
+        description: Intraday high value
+        tests:
+          - not_null
+
+      - name: low
+        description: Intraday low value
+        tests:
+          - not_null
+
+      - name: close
+        description: Closing value of the index
+        tests:
+          - not_null
+
+      - name: volume
+        description: Total market volume underlying the index
+
+      - name: prior_close
+        description: >
+          Closing value of the previous trading session.
+          NULL for the first available date in the dataset.
+
+      - name: pct_change
+        description: >
+          Day-over-day return: (close - prior_close) / prior_close * 100.
+          NULL when prior_close is unavailable or zero.
+
+      - name: ytd_return_pct
+        description: >
+          Return since the first trading day of the calendar year:
+          (close - ytd_start_close) / ytd_start_close * 100.
+          NULL when ytd_start_close is unavailable or zero.
