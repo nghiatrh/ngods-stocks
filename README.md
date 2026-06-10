@@ -1,195 +1,233 @@
-# ngods stock market demo 
-This repository contains a stock market analysis demo of the ngods data stack. The demo performs the following steps:
+# Modern Data Platform demo: VN stock market
+This repository contains a Vietnamese stock market analysis, as a demo of the modern data stack. The demo performs the following steps:
 
-1. Download selected stock symbols data from [Yahoo Finance API](https://finance.yahoo.com/).
-2. Store the stock data in ngods data warehouse (using [Iceberg](https://iceberg.apache.org/) format).
-3. Transform the data (e.g. normalize stock prices) using [dbt](https://www.getdbt.com/).
-4. Expose analytics data model using [cube.dev](https://cube.dev/).
+1. Download Vietnamese equity and index data from [vnstock](https://github.com/thinh-vu/vnstock).
+2. Store the stock data in the data platform (using [Iceberg](https://iceberg.apache.org/) format).
+3. Transform the data (e.g. normalize stock prices, calculate report tables) using [dbt](https://www.getdbt.com/).
+4. Expose an analytics data model using [cube.dev](https://cube.dev/).
 5. Visualize data as reports and dashboards using [Metabase](https://www.metabase.com/).
-6. Predicts stock prices using ARIMA in Apache Spark.
+6. Chat with your data using a semantic-layer-first AI co-pilot powered by [Claude](https://www.anthropic.com/claude) and [Chainlit](https://chainlit.io/).
 
-The demo is packaged as [docker-compose](https://github.com/docker/compose) script that downloads, installs, and runs all components of the data stack.
+The demo is packaged as a [docker-compose](https://github.com/docker/compose) script that downloads, installs, and runs all components of the data stack.
 
-## UPDATES
-- 2023-02-03: 
-    - Upgrade to Apache Iceberg 1.1.0
-    - Upgrade to Trino 406
-    - Migrated to the new JDBC catalog (removed the heavyweigt Hive Metastore)
+This project is folked and upgraded from [Zsvoboda's repo](https://github.com/zsvoboda/ngods-stocks)
 
-# ngods
-ngods stands for New Generation Opensource Data Stack. It includes the following components: 
+# Data Platform components
 
-- [Apache Spark](https://spark.apache.org) for data transformation 
-- [Apache Iceberg](https://iceberg.apache.org) as a data storage format 
-- [Trino](https://trino.io/) for federated data query 
-- [dbt](https://www.getdbt.com/) for ELT 
-- [Dagster](https://dagster.io/) for data orchetsration 
-- [cube.dev](https://cube.dev/) for data analysis and semantic data model 
-- [Metabase](https://www.metabase.com/) for self-service data visualization (dashboards) 
-- [Minio](https://min.io) for local S3 storage 
+It includes the following components:
 
-![ngods components](./img/ngods.architecture.png)
+- [Apache Spark](https://spark.apache.org) for data transformation, provided as Thrift server through Apache Kyuubi
+- [Apache Iceberg](https://iceberg.apache.org) as table format
+- [Trino](https://trino.io/) for federated data query
+- [dbt](https://www.getdbt.com/) for ELT management
+- [Apache Airflow](https://airflow.apache.org/) for data orchestration
+- [cube.dev](https://cube.dev/) for data analysis and semantic data model
+- [Metabase](https://www.metabase.com/) for data visualization (dashboards)
+- [Minio](https://min.io) for local S3 storage
+- [pgvector](https://github.com/pgvector/pgvector) for vector search (used by the chat feature)
 
-ngods is open-sourced under a [BSD license](https://github.com/zsvoboda/ngods-stocks/blob/main/LICENSE) and it is distributed as a docker-compose script that supports Intel and ARM architectures.
+![Data platform components](./img/overall.platform.architecture.png)
+
 
 # Running the demo
-ngods requires a machine with at least 16GB RAM and Intel or Arm 64 CPU running [Docker](https://www.docker.com/). It requires [docker-compose](https://github.com/docker/compose).
+DP requires a machine with at least 16GB RAM and Intel or ARM 64 CPU running [Docker](https://www.docker.com/). It requires [docker-compose](https://github.com/docker/compose).
 
-1. Clone the [ngods repo](https://github.com/zsvoboda/ngods-stocks)
+1. Clone the [Gitlab repo](https://github.com/nghiatrh/ngods-stocks.git)
 
 ```bash
-git clone https://github.com/zsvoboda/ngods-stocks.git
+git clone https://github.com/nghiatrh/ngods-stocks.git
 ```
 
-2. Start the data stack with the `docker-compose up` command
+2. Set your Anthropic API key (required for the chat feature):
+
+```bash
+echo 'ANTHROPIC_API_KEY=sk-ant-...' >> .env
+```
+
+3. Start the data stack:
 
 ```bash
 cd ngods-stocks
-
 docker-compose up -d
 ```
 
 **NOTE:** This can take quite long depending on your network speed.
 
-3. Stop the data stack via the `docker-compose down` command
+4. Stop the data stack:
 
 ```bash
 docker-compose down
 ```
 
-4. Execute the data pipeline from the Dagster console at http://localhost:3070/ with [this yaml config file](./projects/dagster/e2e.yaml).
+5. Execute the data pipeline from the Airflow UI at http://localhost:8080 (username `airflow` / password `airflow`).
 
-![Dagster e2e](./img/demo/dagster.e2e.png)
+   The following DAGs are available:
 
-Cut and paste the content of the [e2e.yaml file](./projects/dagster/e2e.yaml) to this [Dagster UI console page](http://localhost:3070/workspace/workspace@workspace.py/jobs/e2e/playground) and start the data pipeline by clicking the `Launch Run` button. 
+   | DAG | Schedule | Description |
+   |-----|----------|-------------|
+   | `reference_ingestion` | manual / on-demand | Ingest equity listing and reference data |
+   | `market_ingestion` | weekdays 17:00 ICT | Daily ingestion of VN30 equity and index OHLCV |
+   | `market_backfill` | manual | Backfill historical market data |
+   | `bronze_transform` | triggered | dbt bronze-stage transformations |
+   | `silver_gold_transform` | triggered | dbt silver + gold-stage transformations |
 
-**NOTE:** You can customize the list of stock symbols that will be downloaded. 
+6. Review and customize the [cube.dev metrics and dimensions](./conf/cube/schema/). Test these metrics in the [cube.dev playground](http://localhost:4000).
 
-5. Review and customize the [cube.dev metrics, and dimensions](./conf/cube/schema/). Test these metrics in the [cube.dev playground](http://localhost:4000/#/build?query={%22measures%22:[%22StockMarketsMonthly.price_close_relative_avg%22],%22timeDimensions%22:[{%22dimension%22:%22StockMarketsMonthly.dt%22,%22granularity%22:%22month%22,%22dateRange%22:[%222014-09-01%22,%222022-07-03%22]}],%22dimensions%22:[%22StockMarketsMonthly.symbol%22],%22filters%22:[{%22member%22:%22StockMarketsMonthly.symbol%22,%22operator%22:%22equals%22,%22values%22:[%22AAPL%22,%22GC=F%22,%22BTC-USD%22]}],%22order%22:[[%22StockMarketsMonthly.symbol%22,%22asc%22],[%22StockMarketsMonthly.dt%22,%22desc%22]]}).
+   ![cube.dev playground](./img/demo/cube.playground.png)
 
-![cube.dev playground](./img/demo/cube.playground.png)
+   See the [cube.dev documentation](https://cube.dev/docs/) for more information.
 
-See the [cube.dev documentation](https://cube.dev/docs/) for more information.
+7. Check out the Metabase [data visualizations](http://localhost:3030) connected to the cube.dev analytical model.
 
-6. Check out the Metabase [data visualizations](http://localhost:3030/question#eyJkYXRhc2V0X3F1ZXJ5Ijp7InR5cGUiOiJuYXRpdmUiLCJuYXRpdmUiOnsicXVlcnkiOiJzZWxlY3QgXG4gICAgICAgIGR0LCBcbiAgICAgICAgc3ltYm9sLCBcbiAgICAgICAgcHJpY2VfY2xvc2VfcmVsYXRpdmVfYXZnIFxuICAgIGZyb20gU3RvY2tNYXJrZXRzTW9udGhseVxuICAgIHdoZXJlIFxuICAgICAgICBzeW1ib2wgaW4gKCdBQVBMJywgJ0JUQy1VU0QnLCAnR0M9RicpIGFuZCBcbiAgICAgICAgZHQgPj0gJzIwMTQtMDktMDEnXG4gICAgb3JkZXIgYnkgZHQsIHN5bWJvbFxuICAgICIsInRlbXBsYXRlLXRhZ3MiOnt9fSwiZGF0YWJhc2UiOjN9LCJkaXNwbGF5IjoibGluZSIsImRpc3BsYXlJc0xvY2tlZCI6dHJ1ZSwidmlzdWFsaXphdGlvbl9zZXR0aW5ncyI6eyJncmFwaC5kaW1lbnNpb25zIjpbImR0Iiwic3ltYm9sIl0sImdyYXBoLm1ldHJpY3MiOlsicHJpY2VfY2xvc2VfcmVsYXRpdmVfYXZnIl0sImdyYXBoLnhfYXhpcy50aXRsZV90ZXh0IjoiRGF0ZSAobW9udGhzKSIsImdyYXBoLnlfYXhpcy50aXRsZV90ZXh0IjoiQ2xvc2UgcHJpY2UgKHJlbGF0aXZlIHRvIEphbiAxc3QgMjAwMCkifSwib3JpZ2luYWxfY2FyZF9pZCI6MzN9) that is connected to the cube.dev analytical model. You can run [SQL queries](https://cube.dev/docs/backend/sql) on top of the cube.dev schema.  
- 
- Use username `metabase@ngods.com` and password `metabase1`.
+   Use username `metabase@ngods.com` and password `metabase1`.
 
-![Metabase](./img/metabase.png)
+   ![Metabase](./img/metabase.png)
 
-You can create your own data visualizations and dashboards. See the [Metabase documentation](https://metabase.com/docs/latest) for more information.
+8. Use the **chat-with-data** co-pilot at http://localhost:8501 to ask questions about the Vietnamese stock market in layman language.
 
-7. Predict stock close price. Run the [ARIMA time-series prediction model](http://localhost:8888/notebooks/arima.ipynb) notebook that is trained on 29 months of the `Apple:AAPL` stock data and predicts the next month.
+   Before using the chat for the first time, build the RAG index:
 
-![Jupyter ARIMA](./img/jupyter.arima.png)
+   ```bash
+   curl -X POST http://localhost:8001/ingest
+   ```
 
-8. Download [DBeaver](https://dbeaver.io/download/) SQL tool.
+   Then open the Chainlit UI at http://localhost:8501 and start asking questions like *"Which stocks had the biggest gain today?"*.
 
-9. Connect to the Postgres database that contains the `gold` stage data. Use `jdbc:postgresql://localhost:5432/ngods` JDBC URL with username `ngods` and password `ngods`.
+   Re-run `/ingest` whenever you add or change a cube YAML or dbt `schema.yml`.
 
-![Postgres JDBC connection](./img/demo/postgres.jdbc.connection.png)
+   See [projects/chat/README.md](./projects/chat/README.md) for full details.
 
-10. Connect to the Trino database that has access to all data stages (`bronze`, `silver`, and `gold` schemas of the `warehouse` database). Use `jdbc:trino://localhost:8060` JDBC URL with username `trino` and password `trino`. 
+9. If you want to query data directly. Download [DBeaver](https://dbeaver.io/download/) SQL tool.
 
-![Trino JDBC connection](./img/demo/trino.jdbc.connection.png)
+10. Connect to the Trino database that has access to all data stages (`bronze`, `silver`, and `gold` schemas of the `warehouse` database). Use `jdbc:trino://localhost:8060` JDBC URL with username `trino` and no password.
 
-![Trino schemas](./img/demo/trino.schemas.png)
 
-11. Connect to the Spark database that is used for data transformations. Use `jdbc:hive2://localhost:10009` JDBC URL with no username and password.
+    ![Trino schemas](./img/demo/trino.schemas.png)
 
-![Spark JDBC connection](./img/demo/spark.jdbc.connection.png)
+11. Connect to the Postgres database that contains the `iceberg catalog`, `airflow` database, and `embedding data` rag. Use `jdbc:postgresql://localhost:5432/ngods` JDBC URL with username `ngods` and password `ngods`.
+
+    ![Postgres JDBC connection](./img/demo/postgres.jdbc.connection.png)
+
 
 # Customizing the demo
 This chapter contains useful information for customizing the demo.
 
-## ngods directories
-Here are few distribution's directories that you may need to customize:
 
-- `conf` configuration of all data stack components
-    - `cube` cube.dev schema (semantic model definition)
-- `data` main data directory 
-    - `minio` root data directory (contains buckets and file data)
-    - `spark` Jupyter notebooks
-    - `stage` file stage data. Spark can access this directory via `/var/lib/ngods/stage` path. 
-- `projects` dbt, Dagster, and DataHub projects
-    - `dagster` Dagster orchestration project
-    - `dbt` dbt transformations (one project per each medallion stage: `bronze`, `silver`, and `gold`) 
-
-## ngods endpoints
-The data stack has the following endpoints
+## DP endpoints
+The data stack exposes the following endpoints:
 
 - Spark
-    - http://localhost:8888 - Jupyter notebooks 
+    - http://localhost:8888 — Jupyter notebooks
     - `jdbc:hive2://localhost:10009` JDBC URL (no username / password)
-    - localhost:7077 - Spark API endpoint
-    - http://localhost:8061 - Spark master node monitoring page 
-    - http://localhost:8062 - Spark slave node monitoring page 
-    - http://localhost:18080 - Spark history server page 
+    - localhost:7077 — Spark API endpoint
+    - http://localhost:18080 — Spark history server
 - Trino
     - `jdbc:trino://localhost:8060` JDBC URL (username `trino` / no password)
 - Postgres
     - `jdbc:postgresql://localhost:5432/ngods` JDBC URL (username `ngods` / password `ngods`)
 - Cube.dev
-    - http://localhost:4000 - cube.dev development UI 
+    - http://localhost:4000 — cube.dev development UI
     - `jdbc:postgresql://localhost:3245/cube` JDBC URL (username `cube` / password `cube`)
 - Metabase
-    - http://localhost:3030 Metabase UI (username `metabase@ngods.com` / password `metabase1`)
-- Dagster
-    - http://localhost:3070 - Dagster orchestration UI
+    - http://localhost:3030 — Metabase UI (username and password are created by user)
+- Airflow
+    - http://localhost:8080 — Airflow UI (username `airflow` / password `airflow`)
 - Minio
-    - http://localhost:9001 - Minio UI (username `minio` / password `minio123`)
+    - http://localhost:9001 — Minio UI (username `minio` / password `minio123`)
+- Chat API
+    - http://localhost:8001 — FastAPI (`/ingest`, `/ask`, `/health`)
+- Chat UI
+    - http://localhost:8501 — Chainlit co-pilot UI
 
-## ngods databases: Spark, Trino, and Postgres
-ngods stack includes three database engines: Spark, Trino, and Postgres. Both Spark and Trino have access to Iceberg tables in `warehouse.bronze` and `warehouse.silver` schemas. Trino engine can also access the `analytics.gold` schema in Postgres. Trino can federate queries between the Postgres and Iceberg tables. 
+## DP databases: Spark, Trino
+DP includes two database engines: Spark and Trino. Both Spark and Trino have access to Iceberg tables in `warehouse.bronze` `warehouse.silver`, and `warehouse.gold` schemas. 
 
-The Spark engine is configured for ELT and pyspark data transformations. 
+The Spark engine is configured for data transformation.
 
-![Spark](./img/spark.schemas.png)
 
-The Trino engine is configured for data federation between the Iceberg and Postgres tables. Additional catalogs can be [configured](./conf/trino/catalog) as needed. 
+The Trino engine is configured for adhoc query on Iceberg tables. Additional catalogs can be [configured](./conf/trino/catalog) as needed.
 
-![Trino](./img/trino.schemas.png)
 
-The Postgres database has accesses only to the `analytics.gold` schema and it is used for executing analytical queries over the gold data.
+## Postgres database
+The Postgres database plays multiple roles in the system 
+1. Airflow database 
+2. Back the Iceberg catalog (using JDBC-backed Iceberg catalog)
+3. Database of chat, store queries and feedbacks under `chat.log` schema and as the vector store (`chat.rag.chunks`) for the chat co-pilot.
 
 ## Demo data pipeline
-The demo data pipeline is utilizes the [medallion architecture](https://databricks.com/fr/glossary/medallion-architecture) with `bronze`, `silver`, and `gold` data stages. 
+The demo data pipeline uses the [medallion architecture](https://databricks.com/fr/glossary/medallion-architecture) with `bronze`, `silver`, and `gold` stages.
+
+The pipeline consists of the following phases:
+
+1. Data are downloaded from the vnstock API into the local Minio bucket using Airflow DAGs (`reference_ingestion`, `market_ingestion`, `market_backfill`).
+2. The raw CSV/Parquet files are loaded to the bronze stage Iceberg tables (`warehouse.bronze`) via dbt models executed in Spark ([`projects/dbt/bronze_vnstock`](./projects/dbt/bronze_vnstock/)).
+3. Silver stage Iceberg tables (`warehouse.silver`) are created via dbt models executed in Spark ([`projects/dbt/silver_vnstock`](./projects/dbt/silver_vnstock/)).
+4. Gold stage Iceberg tables (`analytics.gold`) are created via dbt models executed in Spark, too ([`projects/dbt/gold_vnstock`](./projects/dbt/gold_vnstock/)).
 
 
-![data pipeline](./img/data.pipeline.png)
+All pipeline phases are orchestrated by [Apache Airflow](https://airflow.apache.org/). DAG definitions live in [`projects/airflow/dags/`](./projects/airflow/dags/).
 
-and consists of the following phases:
-
-1. Data are downloaded from Yahoo Finance REST API to the local Minio bucket ([./data/stage](./data/stage)) using this [Dagster operation](./projects/dagster/download.py).
-2. The downloaded CSV file is loaded to the bronze stage Iceberg tables (warehouse.bronze Spark schema) using dbt models that are executed in Spark ([./projects/dbt/bronze](./projects/dbt/bronze/models/in_yahoo_finance.sql)).
-3. Silver stage Iceberg tables (warehouse.silver Spark schema) are created using dbt models that are executed in Spark ([./projects/dbt/silver](./projects/dbt/silver/models/stock_markets_with_relative_prices.sql)). 
-5. Gold stage Postgres tables (analytics.gold Trino schema) are created using dbt models that are executed in Trino ([./projects/dbt/gold](./projects/dbt/gold/models/stock_markets.sql)).
-
-![DBT models](./img/dbt.models.png)
-
-All data pipeline phases are orchestrated by [Dagster](https://www.dagster.io/) framework. Dagster operations, resources and jobs are defined in the [Dagster project](./projects/dagster/). 
-
-![Dagster console](./img/dagster.console.png)
-
-The pipeline is executed by running the e2e job from the Dagster console at http://localhost:3070/ using [this yaml config file](./projects/dagster/e2e.yaml)
+![Airflow console](./img/airflow.console.png)
 
 ## ngods analytics layer
-ngods includes [cube.dev](https://cube.dev/) for [semantic data model](./conf/cube/schema) and [Metabase](https://www.metabase.com/) for self-service analytics (dashboards, reports, and visualizations).
+ngods includes [cube.dev](https://cube.dev/) for the [semantic data model](./conf/cube/schema) and [Metabase](https://www.metabase.com/) for self-service analytics.
 
-![Analytics](./img/analytics.png)
 
-Analytical (semantic) model is defined in [cube.dev](https://cube.dev/) and is used for executing analytical queries over the gold data.
+The semantic model is defined in cube.dev and governs all analytical queries over the gold data.
 
 ![cube.dev](./img/cube.png)
 
-[Metabase](https://www.metabase.com/) is connected to the [cube.dev](https://cube.dev/) via [SQL API](https://cube.dev/docs/backend/sql). End users can use it for self-service creation of dashboards, reports, and data visualizations. [Metabase](https://www.metabase.com/) is also directly connected to the gold schema in the Postgres database.
+[Metabase](https://www.metabase.com/) is connected to cube.dev via the [SQL API](https://cube.dev/docs/backend/sql). End users can create dashboards, reports, and data visualizations. Metabase is also directly connected to the data on DP through Trino.
 
-![Metabase](./img/demo/metabase.cube.connection.png)
+![Metabase](./img/metabase.png)
 
-## ngods machine learning
-[Jupyter Notebooks](https://jupyter.org/) with Scala, Java and Python backends can be used for machine learning.
+## Data description
+8 bronze (4 market + 4 reference) + 3 silver (1 dim + 2 fact) + 5 gold reporting models.
+**Bronze**
 
-![Jupyter](./img/jupyter.arima.png)
+*Market data (incremental, append-only, partitioned by trade_date):*
+
+1. stg_equity_ohlcv	Daily equity OHLCV bars from bronze/market/equity_ohlcv/.
+2. stg_equity_order_book	Equity order-book snapshots (incl. foreign buy/sell totals).
+3. stg_equity_trades	Tick-level matched equity trades.
+4. stg_index_ohlcv	Daily index OHLCV bars (VNINDEX, VN30, etc.).
+
+*Reference data (full table rebuilds):*
+
+5. stg_equity_listing	Listed-equity master/listing reference.
+6. stg_events	Corporate events reference.
+7. stg_index_listing	Index listing reference.
+8. stg_industry	ICB industry classification reference.
+
+**Silver**
+
+1. dim_equity	Equity dimension — one row per symbol, enriched with ICB industry classification (levels 1–4: codes + names). Full rebuild each run.
+2. fct_equity_daily	Daily equity facts, one row per (trade_date, symbol). Adds prior_close, pct_change, intraday_range_pct (volatility proxy), and volume_ratio_20d (vs 20-session avg).
+3. fct_index_daily	Daily index facts for VNINDEX/VN30/HNX30/UPCOM. Adds prior_close, pct_change, and ytd_return_pct.
+
+**Gold**
+
+1. rpt_market_summary	Daily market-breadth summary across VN30 — one row per date. Advancers/decliners/unchanged, total traded value & volume, avg/top/bottom returns. Drives market-wide dashboard tiles.
+2. rpt_stock_performance	Daily per-stock performance joined with company + sector metadata. One row per (trade_date, symbol). Stock-level drill-down.
+3. rpt_sector_performance	Daily sector-level aggregation (ICB level-3) from VN30 equities. Advancers/decliners, avg return, top/bottom mover, traded value/volume per sector.
+4. rpt_foreign_flow	Daily foreign-investor buy/sell flow per symbol from order-book snapshots. Net foreign volume/value and remaining foreign ownership room.
+5. rpt_trade_flow	Daily intraday trade-flow per symbol from tick data. Trade count, VWAP, avg trade size, buy/sell volume and buy_ratio (buy-pressure indicator).
+
+## Chat with data
+The chat co-pilot is a **semantic-layer-first** AI agent: the LLM never sees raw SQL — it sees Cube measures and dimensions, and emits Cube REST queries. This keeps metric definitions governed and dramatically reduces hallucinations.
+
+![Chat.with.data](./img/chat.with.data.png)
+Key components:
+
+| Component | Description |
+|-----------|-------------|
+| `projects/chat/app/ingest.py` | Pulls Cube `/meta` + dbt `manifest.json`, embeds with **fastembed** (`bge-small-en-v1.5`), and writes to `chat.rag.chunks` (pgvector) |
+| `projects/chat/app/retriever.py` | Vector search; returns full cube schemas behind the top-k hits |
+| `projects/chat/app/router.py` | Single Claude call → JSON Cube query |
+| `projects/chat/app/guardrails.py` | Schema-grounded validation; rejects unknown measures/dimensions before execution |
+| `projects/chat/ui/chainlit_app.py` | Co-pilot UI: question → query → table with thumbs up/down feedback |
+
+See [projects/chat/README.md](./projects/chat/README.md) for full setup and evaluation instructions.
 
 # Support
 Create a [github issue](https://github.com/zsvoboda/ngods-stocks/issues) if you have any questions.
