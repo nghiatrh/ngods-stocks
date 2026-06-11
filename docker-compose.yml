@@ -180,6 +180,7 @@ services:
     volumes:
       - ./projects/chat:/app
       - ./projects/dbt:/dbt:ro
+      - ./conf/cube:/cube/conf:ro
     ports:
       - '8001:8001'
     networks:
