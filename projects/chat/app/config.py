@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     cube_api_url: str = "http://cube:4000"
     cube_api_secret: str = "cube"
     dbt_manifest_path: str = "/dbt/gold_vnstock/target/manifest.json"
+    cube_conf_path: str = "/cube/conf/model/cubes"
 
     llm_router_model: str = "claude-haiku-4-5-20251001"
     llm_generator_model: str = "claude-sonnet-4-6"

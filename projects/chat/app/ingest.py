@@ -12,8 +12,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from .config import settings
 from .cube_client import fetch_meta
@@ -39,10 +42,71 @@ def _load_dbt_columns() -> dict[str, dict[str, str]]:
     return out
 
 
-def _table_name(sql_table: str | None) -> str | None:
-    if not sql_table:
-        return None
-    return sql_table.split(".")[-1]
+_BARE_COLUMN_RE = re.compile(r"^[A-Za-z_]\w*$")
+_CUBE_COLUMN_RE = re.compile(r"\{CUBE\}\.([A-Za-z_]\w*)")
+
+
+def _underlying_column(leaf: dict[str, Any]) -> str:
+    """Resolve a measure/dimension to its underlying dbt column name.
+
+    Cube fields are often renamed/aggregated (e.g. measure `avg_close` over
+    `sql: close`), so we map back to the raw column via the `sql:` expression:
+      - bare identifier  (`close`)                  → that column
+      - single-column expr (`CAST({CUBE}.x AS …)`)  → that one column
+      - multi-column expr (`a / NULLIF(b, 0)`, CONCAT(…)) or no sql
+                                                    → fall back to field name
+    """
+    sql = (leaf.get("sql") or "").strip()
+    if sql and _BARE_COLUMN_RE.match(sql):
+        return sql
+    cols = set(_CUBE_COLUMN_RE.findall(sql))
+    if len(cols) == 1:
+        return cols.pop()
+    return leaf["name"].split(".")[-1]
+
+
+def _load_cube_field_docs(dbt_models: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
+    """Return {cube_name: {field_name: dbt_description}} by parsing Cube YAML.
+
+    The Cube /meta API exposes neither sql_table nor a field's underlying sql
+    column, so we read the YAML files directly: resolve each cube's dbt model
+    from `sql_table`, then map every measure/dimension to its raw column and
+    pull that column's dbt description.
+    """
+    conf_dir = Path(settings.cube_conf_path)
+    if not conf_dir.exists():
+        logger.warning("Cube conf path not found at %s — dbt enrichment disabled", conf_dir)
+        return {}
+    out: dict[str, dict[str, str]] = {}
+    for yml_file in conf_dir.glob("*.yml"):
+        try:
+            doc = yaml.safe_load(yml_file.read_text())
+        except Exception as exc:
+            logger.warning("Failed to parse %s: %s", yml_file, exc)
+            continue
+        for cube in doc.get("cubes", []) or []:
+            name = cube.get("name")
+            sql_table = cube.get("sql_table")
+            if not name or not sql_table:
+                continue
+            table = sql_table.split(".")[-1]      # gold.rpt_stock_performance → rpt_stock_performance
+            dbt_cols = dbt_models.get(table, {})
+            if not dbt_cols:
+                logger.warning("No dbt model %r for cube %r — enrichment skipped", table, name)
+                continue
+            field_docs: dict[str, str] = {}
+            for leaf in (cube.get("measures") or []) + (cube.get("dimensions") or []):
+                field = (leaf.get("name") or "").split(".")[-1]
+                col = _underlying_column(leaf)
+                desc = dbt_cols.get(col, "")
+                if field and desc:
+                    field_docs[field] = desc
+            out[name] = field_docs
+            logger.info("Cube %s → table %s: enriched %d/%d fields from dbt",
+                        name, table,
+                        len(field_docs),
+                        len(cube.get("measures") or []) + len(cube.get("dimensions") or []))
+    return out
 
 
 def _cube_chunk(cube: dict[str, Any]) -> dict[str, Any]:
@@ -92,17 +156,18 @@ def _leaf_chunk(cube: dict[str, Any], leaf: dict[str, Any], kind: str,
 def build_chunks() -> list[dict[str, Any]]:
     meta = fetch_meta()
     dbt_models = _load_dbt_columns()
+    cube_field_docs = _load_cube_field_docs(dbt_models)
     chunks: list[dict[str, Any]] = []
     for cube in meta.get("cubes", []):
         if cube.get("isVisible") is False:
             continue
         chunks.append(_cube_chunk(cube))
-        table = _table_name(cube.get("sql") or cube.get("sqlTable"))
-        cols = dbt_models.get(table or "", {})
+        # {field_name: dbt_description} already resolved through each field's sql column
+        field_docs = cube_field_docs.get(cube["name"], {})
         for m in cube.get("measures", []):
-            chunks.append(_leaf_chunk(cube, m, "measure", cols))
+            chunks.append(_leaf_chunk(cube, m, "measure", field_docs))
         for d in cube.get("dimensions", []):
-            chunks.append(_leaf_chunk(cube, d, "dimension", cols))
+            chunks.append(_leaf_chunk(cube, d, "dimension", field_docs))
     return chunks
 
 
