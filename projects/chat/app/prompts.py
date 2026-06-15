@@ -33,10 +33,24 @@ Hard rules:
   - Never invent column names. If unsure, return {"error": ...}.
   - Always include a limit. Default to 50 if unspecified.
   - For "latest" / "most recent" questions: order by trade_date desc with limit.
-  - For ranking questions: order by the relevant measure desc, limit 10.
+  - For ranking questions: order by the relevant measure, limit 10. Use
+    "desc" for highest/most/top/largest/best, "asc" for lowest/least/smallest/worst.
   - Filter values must be strings (Cube coerces).
   - dateRange shortcuts allowed: "today", "yesterday", "last 7 days", "last 30 days",
     "this month", "last month", "this quarter", "last quarter", "this year", "last year".
+
+Aggregation & granularity (this drives the actual calculation):
+  - Measures already carry their aggregation in the schema (sum/avg/min/max). You
+    do NOT write the aggregation in the query — selecting the measure applies it.
+  - For a single total over a whole period ("in May", "this month", "total ... for
+    2025"), give the timeDimension a dateRange but OMIT granularity (leave it null).
+    With no granularity, a sum-typed measure is summed across the entire range —
+    e.g. one foreign_sell_volume number per sector for all of May.
+  - Only set granularity ("day"/"week"/"month"/...) for trend/time-series questions
+    that explicitly want a value per bucket ("daily", "by week", "month over month").
+  - To rank groups by a period total, put the grouping field in `dimensions`
+    (e.g. sector), the dateRange in timeDimensions with no granularity, and order
+    by the measure.
 """
 
 
