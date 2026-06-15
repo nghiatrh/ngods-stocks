@@ -205,9 +205,130 @@ services:
     depends_on:
       - chat-api
 
+  # ---------------------------------------------------------------------------
+  # OpenMetadata — metadata catalog, lineage & governance (UI on :8585)
+  # ---------------------------------------------------------------------------
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.3.0
+    container_name: elasticsearch
+    hostname: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - xpack.security.enabled=false
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - ndsnet
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health?wait_for_status=yellow || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+
+  # One-shot schema migration. Gated behind the "init" profile so it does NOT
+  # run on a normal `docker compose up -d`. Run it only on first setup or after
+  # bumping the OpenMetadata image version:
+  #   docker compose --profile init run --rm execute-migrate-all
+  execute-migrate-all:
+    image: docker.getcollate.io/openmetadata/server:1.13.0
+    container_name: execute-migrate-all
+    profiles: ["init"]
+    command: "./bootstrap/openmetadata-ops.sh migrate"
+    environment:
+      DB_DRIVER_CLASS: "org.postgresql.Driver"
+      DB_SCHEME: "postgresql"
+      DB_PARAMS: "allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC"
+      DB_USER: "ngods"
+      DB_USER_PASSWORD: "ngods"
+      DB_HOST: "postgres"
+      DB_PORT: "5432"
+      OM_DATABASE: "openmetadata"
+      ELASTICSEARCH_HOST: "elasticsearch"
+      ELASTICSEARCH_PORT: "9200"
+      ELASTICSEARCH_SCHEME: "http"
+      SERVER_PORT: "8585"
+      SERVER_ADMIN_PORT: "8586"
+    networks:
+      - ndsnet
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    restart: on-failure
+
+  openmetadata-server:
+    image: docker.getcollate.io/openmetadata/server:1.13.0
+    container_name: openmetadata-server
+    hostname: openmetadata-server
+    ports:
+      - "8585:8585"
+      - "8586:8586"
+    environment:
+      DB_DRIVER_CLASS: "org.postgresql.Driver"
+      DB_SCHEME: "postgresql"
+      DB_PARAMS: "allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC"
+      DB_USER: "ngods"
+      DB_USER_PASSWORD: "ngods"
+      DB_HOST: "postgres"
+      DB_PORT: "5432"
+      OM_DATABASE: "openmetadata"
+      ELASTICSEARCH_HOST: "elasticsearch"
+      ELASTICSEARCH_PORT: "9200"
+      ELASTICSEARCH_SCHEME: "http"
+      SERVER_PORT: "8585"
+      SERVER_ADMIN_PORT: "8586"
+      OPENMETADATA_HEAP_OPTS: "-Xmx1G -Xms1G"
+      LOG_LEVEL: "INFO"
+    networks:
+      - ndsnet
+    # No depends_on execute-migrate-all: the schema is migrated once via the
+    # "init" profile and persists in Postgres. The server retries its DB
+    # connection on boot, so it is safe to start without the migration job.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8586/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 12
+    restart: unless-stopped
+
+  openmetadata-ingestion:
+    image: docker.getcollate.io/openmetadata/ingestion:1.13.0
+    container_name: openmetadata-ingestion
+    hostname: openmetadata-ingestion
+    # Port 8080 intentionally NOT published to the host — aio's Airflow already
+    # occupies host:8080. The OM server reaches this container via the docker
+    # network alias openmetadata-ingestion:8080.
+    # The OM bootstrap script (ingestion_dependency.sh) initialises the Airflow DB,
+    # sets up SimpleAuthManager, and starts api-server + dag-processor + scheduler.
+    command: ["bash", "/opt/airflow/ingestion_dependency.sh"]
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://ngods:ngods@postgres:5432/openmetadata_airflow"
+      AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW_ADMIN_USER: "admin"
+      AIRFLOW_ADMIN_PASSWORD: "admin"
+      OPENMETADATA_SERVER_URL: "http://openmetadata-server:8585"
+    volumes:
+      - ./projects/dbt:/dbt:ro
+    networks:
+      - ndsnet
+    depends_on:
+      openmetadata-server:
+        condition: service_healthy
+    restart: unless-stopped
+
 networks:
   ndsnet:
     driver: bridge
 
 volumes:
   postgres_data:
+  elasticsearch_data:

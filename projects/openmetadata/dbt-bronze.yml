@@ -1,0 +1,26 @@
+# OpenMetadata dbt ingestion — bronze_vnstock project
+# Attaches dbt model descriptions, tags, and test results to tables
+# already crawled under the ngods-warehouse service.
+# catalog.json is omitted (run "dbt docs generate" to produce it for column types).
+# Run via:  bin/setup_openmetadata.sh
+source:
+  type: dbt
+  serviceName: ngods-warehouse
+  sourceConfig:
+    config:
+      type: DBT
+      dbtConfigSource:
+        dbtConfigType: local
+        dbtManifestFilePath: /dbt/bronze_vnstock/target/manifest.json
+        dbtRunResultsFilePath: /dbt/bronze_vnstock/target/run_results.json
+      dbtUpdateDescriptions: true
+      includeTags: true
+sink:
+  type: metadata-rest
+  config: {}
+workflowConfig:
+  openMetadataServerConfig:
+    hostPort: "http://openmetadata-server:8585/api"
+    authProvider: openmetadata
+    securityConfig:
+      jwtToken: "${OM_JWT_TOKEN}"

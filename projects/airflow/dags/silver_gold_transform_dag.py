@@ -47,6 +47,47 @@ def _run_dbt(project_dir: str, select: str | None = None) -> None:
         raise RuntimeError(f"dbt run failed for {project_dir} (exit {result.returncode})")
 
 
+def _run_dbt_tests(project_dir: str) -> None:
+    """Run dbt tests so OpenMetadata can ingest test-case pass/fail results.
+
+    A failing data test (exit 1) is logged but does NOT fail the task — the
+    result is written to run_results.json and surfaces in OpenMetadata. Only a
+    real execution error (exit >= 2: compile/connection failure) raises.
+    """
+    import subprocess
+
+    result = subprocess.run(
+        ["dbt", "test",
+         "--project-dir", project_dir,
+         "--profiles-dir", PROFILES_DIR,
+         "--target", "dev"],
+        capture_output=True, text=True,
+    )
+    print(result.stdout)
+    if result.returncode >= 2:
+        print(result.stderr)
+        raise RuntimeError(f"dbt test errored for {project_dir} (exit {result.returncode})")
+    if result.returncode == 1:
+        print(f"WARNING: one or more dbt tests failed for {project_dir} — see OpenMetadata.")
+
+
+def _generate_dbt_docs(project_dir: str) -> None:
+    """Produce catalog.json for OpenMetadata dbt ingestion."""
+    import subprocess
+
+    result = subprocess.run(
+        ["dbt", "docs", "generate",
+         "--project-dir", project_dir,
+         "--profiles-dir", PROFILES_DIR,
+         "--target", "dev"],
+        capture_output=True, text=True,
+    )
+    print(result.stdout)
+    if result.returncode != 0:
+        print(result.stderr)
+        raise RuntimeError(f"dbt docs generate failed for {project_dir} (exit {result.returncode})")
+
+
 @dag(
     dag_id="silver_gold_transform",
     description="dbt silver_vnstock → gold_vnstock daily metric refresh",
@@ -80,7 +121,33 @@ def silver_gold_transform_dag():
         """Build all rpt_* report tables that depend on silver."""
         _run_dbt(GOLD_DIR)
 
-    wait_for_bronze >> run_silver() >> run_gold()
+    @task
+    def test_silver() -> None:
+        """Run silver dbt tests; results flow to OpenMetadata."""
+        _run_dbt_tests(SILVER_DIR)
+
+    @task
+    def test_gold() -> None:
+        """Run gold dbt tests; results flow to OpenMetadata."""
+        _run_dbt_tests(GOLD_DIR)
+
+    @task
+    def generate_silver_docs() -> None:
+        """Produce catalog.json for OpenMetadata dbt ingestion."""
+        _generate_dbt_docs(SILVER_DIR)
+
+    @task
+    def generate_gold_docs() -> None:
+        """Produce catalog.json for OpenMetadata dbt ingestion."""
+        _generate_dbt_docs(GOLD_DIR)
+
+    # Per layer: run → test → docs generate. test writes run_results.json last
+    # (docs generate doesn't touch it), so test outcomes reach OpenMetadata.
+    (
+        wait_for_bronze
+        >> run_silver() >> test_silver() >> generate_silver_docs()
+        >> run_gold() >> test_gold() >> generate_gold_docs()
+    )
 
 
 silver_gold_transform_dag()

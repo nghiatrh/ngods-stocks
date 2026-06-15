@@ -1,0 +1,33 @@
+# OpenMetadata ingestion workflow — Trino warehouse catalog
+# Crawls all schemas in the warehouse catalog (bronze / silver / gold Iceberg layers).
+# Run via:  bin/setup_openmetadata.sh
+source:
+  type: trino
+  serviceName: ngods-warehouse
+  serviceConnection:
+    config:
+      type: Trino
+      username: trino
+      hostPort: trino:8060
+      catalog: warehouse
+  sourceConfig:
+    config:
+      type: DatabaseMetadata
+      schemaFilterPattern:
+        excludes:
+          - information_schema
+          - public
+          - pg_catalog
+          - default
+      includeTables: true
+      includeViews: true
+      markDeletedTables: false
+sink:
+  type: metadata-rest
+  config: {}
+workflowConfig:
+  openMetadataServerConfig:
+    hostPort: "http://openmetadata-server:8585/api"
+    authProvider: openmetadata
+    securityConfig:
+      jwtToken: "${OM_JWT_TOKEN}"
