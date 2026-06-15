@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from . import ingest as ingest_mod
 from .config import settings
-from .cube_client import run_query
+from .cube_client import run_query, sanitize
 from .db import get_conn
 from .guardrails import GuardrailError, validate_query
 from .retriever import assemble_context
@@ -88,7 +88,10 @@ def ask(req: AskRequest) -> AskResponse:
     rationale = parsed.get("rationale")
 
     try:
-        cube_query = validate_query(raw_query, ctx["cubes"])
+        # Sanitize after validation so the query we log, return and display is
+        # byte-for-byte the one Cube actually executes (no null granularity,
+        # no empty lists) — otherwise users copy a query that won't run.
+        cube_query = sanitize(validate_query(raw_query, ctx["cubes"]))
     except GuardrailError as e:
         latency = int((time.monotonic() - t0) * 1000)
         qid = _log_query(req.question, ctx["retrieved_ids"], raw_query, None,

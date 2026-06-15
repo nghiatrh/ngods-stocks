@@ -24,8 +24,12 @@ def fetch_meta() -> dict[str, Any]:
         return r.json()
 
 
-def _sanitize(query: dict[str, Any]) -> dict[str, Any]:
-    """Strip fields that Cube rejects: null granularity, empty lists, null values."""
+def sanitize(query: dict[str, Any]) -> dict[str, Any]:
+    """Strip fields that Cube rejects: null granularity, empty lists, null values.
+
+    This is the exact normalization applied before a query is sent to Cube, so
+    the caller can surface/log the *same* query that actually executed.
+    """
     q = {k: v for k, v in query.items() if v is not None and v != [] and v != {}}
 
     # granularity: null is invalid — omit the key entirely
@@ -49,7 +53,7 @@ def run_query(query: dict[str, Any], timeout: float = 30.0) -> dict[str, Any]:
     pre-aggregation builds — poll briefly before giving up.
     """
     url = f"{settings.cube_api_url}/cubejs-api/v1/load"
-    clean = _sanitize(query)
+    clean = sanitize(query)
     deadline = time.monotonic() + timeout
     with httpx.Client(timeout=timeout) as c:
         while True:
