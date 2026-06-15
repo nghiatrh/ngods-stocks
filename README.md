@@ -23,6 +23,7 @@ It includes the following components:
 - [Apache Airflow](https://airflow.apache.org/) for data orchestration
 - [cube.dev](https://cube.dev/) for data analysis and semantic data model
 - [Metabase](https://www.metabase.com/) for data visualization (dashboards)
+- [OpenMetadata](https://open-metadata.org/) for the data catalog, lineage, and governance
 - [Minio](https://min.io) for local S3 storage
 - [pgvector](https://github.com/pgvector/pgvector) for vector search (used by the chat feature)
 
@@ -130,6 +131,8 @@ The data stack exposes the following endpoints:
     - `jdbc:postgresql://localhost:3245/cube` JDBC URL (username `cube` / password `cube`)
 - Metabase
     - http://localhost:3030 — Metabase UI (username and password are created by user)
+- OpenMetadata
+    - http://localhost:8585 — OpenMetadata UI (username `admin@open-metadata.org` / password `Admin1234!`)
 - Airflow
     - http://localhost:8080 — Airflow UI (username `airflow` / password `airflow`)
 - Minio
@@ -162,7 +165,7 @@ The pipeline consists of the following phases:
 1. Data are downloaded from the vnstock API into the local Minio bucket using Airflow DAGs (`reference_ingestion`, `market_ingestion`, `market_backfill`).
 2. The raw CSV/Parquet files are loaded to the bronze stage Iceberg tables (`warehouse.bronze`) via dbt models executed in Spark ([`projects/dbt/bronze_vnstock`](./projects/dbt/bronze_vnstock/)).
 3. Silver stage Iceberg tables (`warehouse.silver`) are created via dbt models executed in Spark ([`projects/dbt/silver_vnstock`](./projects/dbt/silver_vnstock/)).
-4. Gold stage Iceberg tables (`analytics.gold`) are created via dbt models executed in Spark, too ([`projects/dbt/gold_vnstock`](./projects/dbt/gold_vnstock/)).
+4. Gold stage Iceberg tables (`warehouse.gold`) are created via dbt models executed in Spark, too ([`projects/dbt/gold_vnstock`](./projects/dbt/gold_vnstock/)).
 
 
 All pipeline phases are orchestrated by [Apache Airflow](https://airflow.apache.org/). DAG definitions live in [`projects/airflow/dags/`](./projects/airflow/dags/).
@@ -180,6 +183,16 @@ The semantic model is defined in cube.dev and governs all analytical queries ove
 [Metabase](https://www.metabase.com/) is connected to cube.dev via the [SQL API](https://cube.dev/docs/backend/sql). End users can create dashboards, reports, and data visualizations. Metabase is also directly connected to the data on DP through Trino.
 
 ![Metabase](./img/metabase.png)
+
+## Metadata catalog: OpenMetadata
+[OpenMetadata](https://open-metadata.org/) provides the data catalog, column-level documentation, lineage, and data-quality results for the platform. It runs as the `openmetadata-server` (UI at http://localhost:8585) backed by `elasticsearch` for search and the `openmetadata` Postgres database; ingestion runs in the bundled `openmetadata-ingestion` container.
+
+Metadata is populated in two passes by [`bin/setup_openmetadata.sh`](./bin/setup_openmetadata.sh):
+
+1. A **Trino** crawl of the `warehouse` catalog registers the physical `bronze`/`silver`/`gold` tables.
+2. Three **dbt** workflows (one per project) attach model and column descriptions, `bronze → silver → gold` lineage from the dbt `ref()` graph, and `dbt test` results on top of those tables.
+
+Ingestion configs live in [`projects/openmetadata/`](./projects/openmetadata/). The transform DAGs run `dbt docs generate` and `dbt test` so the catalog stays current on each pipeline run; re-run `bin/setup_openmetadata.sh` to refresh the catalog after a pipeline run.
 
 ## Data description
 8 bronze (4 market + 4 reference) + 3 silver (1 dim + 2 fact) + 5 gold reporting models.

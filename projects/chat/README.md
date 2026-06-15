@@ -68,8 +68,9 @@ not exact JSON. Add a case any time you find a regression.
   harder to spot.
 - **No text-to-SQL fallback** — if no cube fits, you get an error. Fallback
   is a much bigger guardrail surface; tackle it after the cube path is solid.
-- **No DataHub ingestion** — Cube + dbt covers the visible-to-LLM surface.
-  Adding DataHub makes sense once you have a glossary worth retrieving.
+- **No OpenMetadata ingestion into the RAG store** — Cube + dbt covers the
+  visible-to-LLM surface. Pulling the OpenMetadata catalog (glossary, lineage)
+  into the retriever makes sense once you have a glossary worth retrieving.
 - **Logging is in Postgres** (`chat.log.queries`, `chat.log.feedback`), not
   Iceberg. Stream to Iceberg when you actually want to analyze it.
 

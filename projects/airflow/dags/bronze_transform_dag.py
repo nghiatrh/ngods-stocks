@@ -45,6 +45,47 @@ def _run_dbt(select: str | None = None) -> None:
         raise RuntimeError(f"dbt run failed (exit {result.returncode})")
 
 
+def _run_dbt_tests() -> None:
+    """Run dbt tests so OpenMetadata can ingest test-case pass/fail results.
+
+    A failing data test (exit 1) is logged but does NOT fail the task — the
+    result is written to run_results.json and surfaces in OpenMetadata. Only a
+    real execution error (exit >= 2: compile/connection failure) raises.
+    """
+    import subprocess
+
+    result = subprocess.run(
+        ["dbt", "test",
+         "--project-dir", DBT_PROJECT_DIR,
+         "--profiles-dir", DBT_PROFILES_DIR,
+         "--target", DBT_TARGET],
+        capture_output=True, text=True,
+    )
+    print(result.stdout)
+    if result.returncode >= 2:
+        print(result.stderr)
+        raise RuntimeError(f"dbt test errored (exit {result.returncode})")
+    if result.returncode == 1:
+        print("WARNING: one or more dbt tests failed — see results in OpenMetadata.")
+
+
+def _generate_dbt_docs() -> None:
+    """Generate dbt docs (produces catalog.json for OpenMetadata dbt ingestion)."""
+    import subprocess
+
+    result = subprocess.run(
+        ["dbt", "docs", "generate",
+         "--project-dir", DBT_PROJECT_DIR,
+         "--profiles-dir", DBT_PROFILES_DIR,
+         "--target", DBT_TARGET],
+        capture_output=True, text=True,
+    )
+    print(result.stdout)
+    if result.returncode != 0:
+        print(result.stderr)
+        raise RuntimeError(f"dbt docs generate failed (exit {result.returncode})")
+
+
 @dag(
     dag_id="bronze_transform",
     description=(
@@ -69,9 +110,20 @@ def bronze_transform_dag():
         """Full-refresh for listing, industry and events tables."""
         _run_dbt(select="bronze_vnstock.reference")
 
-    # Both model groups are independent — run in parallel
-    transform_market()
-    transform_reference()
+    @task
+    def run_tests() -> None:
+        """Run dbt tests; results flow to OpenMetadata via run_results.json."""
+        _run_dbt_tests()
+
+    @task
+    def generate_docs() -> None:
+        """Produce catalog.json for OpenMetadata dbt ingestion."""
+        _generate_dbt_docs()
+
+    # market + reference run in parallel → test → docs generate.
+    # test writes run_results.json last (docs generate doesn't touch it),
+    # so test outcomes reach OpenMetadata.
+    [transform_market(), transform_reference()] >> run_tests() >> generate_docs()
 
 
 bronze_transform_dag()
