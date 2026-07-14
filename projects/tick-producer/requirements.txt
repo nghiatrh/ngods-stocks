@@ -1,0 +1,4 @@
+vnstock
+confluent-kafka>=2.6
+pandas
+tzdata

@@ -206,6 +206,88 @@ services:
       - chat-api
 
   # ---------------------------------------------------------------------------
+  # Realtime streaming layer — Kafka (KRaft) + vnstock tick producer
+  # ---------------------------------------------------------------------------
+
+  kafka:
+    image: apache/kafka:3.9.1
+    container_name: kafka
+    hostname: kafka
+    environment:
+      - CLUSTER_ID=jJEIU3vvSbCDjHLvbqmCgg
+      - KAFKA_NODE_ID=1
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:29092
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - KAFKA_LOG_DIRS=/var/lib/kafka/data
+    ports:
+      - '29092:29092' # host access (advertised as localhost:29092)
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - ndsnet
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  # One-shot topic creation (same pattern as mc for MinIO buckets):
+  # market.ticks keeps 7 days for replay/backfill, market.metrics.1m keeps 3.
+  kafka-init:
+    image: apache/kafka:3.9.1
+    container_name: kafka-init
+    entrypoint: >
+      /bin/sh -c "
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic market.ticks --partitions 3 --replication-factor 1 --config retention.ms=604800000;
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic market.metrics.1m --partitions 3 --replication-factor 1 --config retention.ms=259200000;
+      exit 0;
+      "
+    networks:
+      - ndsnet
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  tick-producer:
+    build: projects/tick-producer
+    container_name: tick-producer
+    hostname: tick-producer
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - TICKS_TOPIC=market.ticks
+      - POLL_INTERVAL_SECONDS=30
+      - TRADING_HOURS_ONLY=${TRADING_HOURS_ONLY:-true}
+      - VNSTOCK_API_KEY=${VNSTOCK_API_KEY:-}
+    networks:
+      - ndsnet
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    hostname: kafka-ui
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=ngods
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+    ports:
+      - '8082:8080' # Kafka UI (8080 already used by Airflow)
+    networks:
+      - ndsnet
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
   # OpenMetadata — metadata catalog, lineage & governance (UI on :8585)
   # ---------------------------------------------------------------------------
 
@@ -332,3 +414,4 @@ networks:
 volumes:
   postgres_data:
   elasticsearch_data:
+  kafka_data:
