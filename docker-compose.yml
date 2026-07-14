@@ -272,6 +272,89 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Cold path: Spark Structured Streaming, Kafka market.ticks -> Iceberg
+  # warehouse.bronze.ticks_stream. Reuses the already-built aio image by tag
+  # (same Iceberg/S3A conf, same jars) rather than a second `build:` of the
+  # same Dockerfile - avoids rebuilding an already-tagged image and overrides
+  # the entrypoint to run spark-submit in client mode against the standalone
+  # master hosted in the aio container, instead of aio's normal boot sequence
+  # (Spark master/worker, Kyuubi, Airflow). See projects/spark-streaming/README.md.
+  # Run `docker compose build aio` first if ngods-stocks-aio:latest doesn't exist yet.
+  tick-stream:
+    image: ngods-stocks-aio:latest
+    container_name: tick-stream
+    hostname: tick-stream
+    entrypoint: ["/opt/spark/bin/spark-submit"]
+    command:
+      - --master
+      - spark://spark:7077
+      # Without cores.max a standalone app grabs every worker core, starving
+      # the other streaming app and Kyuubi/dbt. 2 + 2 leaves 4 of 8 for dbt.
+      - --conf
+      - spark.cores.max=2
+      - --packages
+      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.8,org.apache.spark:spark-token-provider-kafka-0-10_2.12:3.5.8,org.apache.kafka:kafka-clients:3.9.1
+      - /var/lib/ngods/streaming/ticks_to_bronze.py
+    environment:
+      - AWS_ACCESS_KEY_ID=minio
+      - AWS_SECRET_ACCESS_KEY=minio123
+      - AWS_REGION=us-east-1
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - TICKS_TOPIC=market.ticks
+      - BRONZE_TABLE=warehouse.bronze.ticks_stream
+      - CHECKPOINT_PATH=s3a://warehouse/checkpoints/ticks_stream
+      - TRIGGER_INTERVAL=30 seconds
+    volumes:
+      - ./projects/spark-streaming:/var/lib/ngods/streaming
+    networks:
+      - ndsnet
+    depends_on:
+      kafka:
+        condition: service_healthy
+      aio:
+        condition: service_started
+    restart: unless-stopped
+
+  # Hot path: Spark Structured Streaming, Kafka market.ticks -> 1-minute
+  # OHLCV/VWAP/imbalance bars -> Postgres realtime.bars_1m (upsert) + Kafka
+  # market.metrics.1m. Same execution pattern as tick-stream (aio image,
+  # spark-submit client mode). See projects/spark-streaming/README.md.
+  tick-metrics:
+    image: ngods-stocks-aio:latest
+    container_name: tick-metrics
+    hostname: tick-metrics
+    entrypoint: ["/opt/spark/bin/spark-submit"]
+    command:
+      - --master
+      - spark://spark:7077
+      - --conf
+      - spark.cores.max=2
+      - --packages
+      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.8,org.apache.spark:spark-token-provider-kafka-0-10_2.12:3.5.8,org.apache.kafka:kafka-clients:3.9.1
+      - /var/lib/ngods/streaming/ticks_to_realtime.py
+    environment:
+      - AWS_ACCESS_KEY_ID=minio
+      - AWS_SECRET_ACCESS_KEY=minio123
+      - AWS_REGION=us-east-1
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - TICKS_TOPIC=market.ticks
+      - METRICS_TOPIC=market.metrics.1m
+      - PG_DSN=postgresql://ngods:ngods@postgres:5432/ngods
+      - CHECKPOINT_PATH=s3a://warehouse/checkpoints/bars_1m
+      - TRIGGER_INTERVAL=30 seconds
+    volumes:
+      - ./projects/spark-streaming:/var/lib/ngods/streaming
+    networks:
+      - ndsnet
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      aio:
+        condition: service_started
+    restart: unless-stopped
+
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
